@@ -17,6 +17,10 @@ typedef double float8;
 
 
 #pragma pack(push,1)
+/**
+ * See http://surveys.roe.ac.uk/ssa/www/ssa_browser.html
+ * The whole detection table is here in RA sections http://www-wfau.roe.ac.uk/www-data/ssa/source/
+ */
 typedef
 struct ssa_source {
   int64_t objID;      /*<         Unique identifier of merged source*/

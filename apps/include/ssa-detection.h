@@ -3,6 +3,7 @@
  *
  *  Created on: Feb 12, 2013
  *      Author: amyznikov
+ *
  */
 
 #ifndef __ssa_detection_h__
@@ -16,6 +17,10 @@ typedef float float4;
 typedef double float8;
 
 #pragma pack(push,1)
+/**
+ * See http://surveys.roe.ac.uk/ssa/www/SSA_TABLE_DetectionSchema.html#Detection
+ * The whole detection table is here in RA sections http://www-wfau.roe.ac.uk/www-data/ssa-detection/
+ */
 typedef
 struct ssa_detection_s {
   // Type  Name         Length  Unit  Description Default Value Unified Content Descriptor
@@ -70,6 +75,10 @@ struct ssa_detection_s {
 
 
 #pragma pack(push,1)
+/**
+ * Selected subset of columns from ssa_detection_s structure,
+ * contains data only for particular plate
+ * */
 typedef
 struct ssa_detection2_s {
   // Type  Name         Length  Unit  Description Default Value Unified Content Descriptor

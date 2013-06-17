@@ -32,17 +32,28 @@ typedef struct {
 
 typedef int (*cmpfunc_t)( const void * v1, const void * v2 );
 
+static inline int cmp_int( const void * intvalue1, const void * intvalue2 )
+{
+  const int * u1 = intvalue1, *u2 = intvalue2;
+  if ( *u1 < *u2 ) {
+    return -1;
+  }
+  if ( *u1 > *u2 ) {
+    return +1;
+  }
+  return 0;
+}
+
+
 static inline ccarray_t * ccarray_create( size_t capacity, size_t item_size )
 {
   ccarray_t * c = (ccarray_t * )calloc(1, sizeof(ccarray_t));
   if ( c )
   {
-    if ( !( c->items = calloc(capacity, item_size) ) )
-    {
+    if ( !( c->items = calloc(capacity, item_size) ) ) {
       free(c), c = 0;
     }
-    else
-    {
+    else {
       c->capacity = capacity;
       c->items_count = 0;
       c->item_size = item_size;
@@ -56,8 +67,7 @@ static inline void ccarray_destroy( ccarray_t * c )
 {
   if ( c )
   {
-    if ( c->items )
-    {
+    if ( c->items ) {
       free(c->items);
     }
 
@@ -111,14 +121,15 @@ static inline size_t ccarray_insert( ccarray_t * c, size_t pos, const void * dat
 
 static inline size_t ccarray_pop_back( ccarray_t * c, void * data )
 {
-  if ( c->items_count < 1 )
-  {
+  if ( c->items_count < 1 ) {
     return (size_t) ( -1 );
   }
 
-  memcpy(data, (uint8_t*)c->items + --c->items_count * c->item_size, c->item_size);
+  if ( data ) {
+    memcpy(data, (uint8_t*)c->items + (c->items_count-1) * c->item_size, c->item_size);
+  }
 
-  return c->items_count;
+  return --c->items_count;
 }
 
 static inline size_t ccarray_pop_front( ccarray_t * c, void * data )
@@ -137,8 +148,7 @@ static inline size_t ccarray_pop_front( ccarray_t * c, void * data )
 
 static inline size_t ccarray_erase( ccarray_t * c, size_t pos )
 {
-  if ( pos < c->items_count )
-  {
+  if ( pos < c->items_count ) {
     memcpy((uint8_t*)c->items + pos * c->item_size, (uint8_t*)c->items + ( pos + 1 ) * c->item_size,
       ( --c->items_count - pos ) * c->item_size);
   }
@@ -177,8 +187,7 @@ static inline size_t ccarray_find_item( ccarray_t * c, const void * value )
   size_t pos = 0;
   const uint8_t * begin = (uint8_t*)c->items;
   const uint8_t * const end = (uint8_t*)c->items + c->items_count * c->item_size;
-  while ( begin < end && bcmp(begin, value, c->item_size) != 0 )
-  {
+  while ( begin < end && bcmp(begin, value, c->item_size) != 0 ) {
     begin += c->item_size, ++pos;
   }
   return pos;
@@ -189,8 +198,7 @@ static inline size_t ccarray_find( ccarray_t * c, cmpfunc_t cmp, const void * va
   size_t pos = 0;
   const uint8_t * begin = (uint8_t*)c->items;
   const uint8_t * const end = (uint8_t*)c->items + c->items_count * c->item_size;
-  while ( begin < end && cmp(begin, value) != 0 )
-  {
+  while ( begin < end && cmp(begin, value) != 0 ) {
     begin += c->item_size, ++pos;
   }
   return pos;
@@ -199,6 +207,28 @@ static inline size_t ccarray_find( ccarray_t * c, cmpfunc_t cmp, const void * va
 static inline void ccarray_sort( ccarray_t * c, size_t beg, size_t end, cmpfunc_t cmp)
 {
   qsort(((uint8_t*) c->items) + beg * c->item_size, end - beg, c->item_size, cmp);
+}
+
+static inline void ccarray_unique( ccarray_t * c, cmpfunc_t cmp)
+{
+  if ( c->items_count > 1 )
+  {
+    size_t pos;
+
+    qsort(c->items, c->items_count, c->item_size, cmp);
+
+    pos = 0;
+    while ( pos < c->items_count - 1 )
+    {
+      if ( cmp(c->items + pos * c->item_size, c->items + (pos + 1) * c->item_size) != 0 ) {
+        ++pos;
+      }
+      else {
+        memcpy(c->items + (pos + 1) * c->item_size, c->items + (pos + 2) * c->item_size,
+            c->item_size * (--c->items_count - pos - 1));
+      }
+    }
+  }
 }
 
 static inline size_t ccarray_lowerbound(const ccarray_t * c, size_t beg, size_t end, cmpfunc_t cmp, const void * value)
@@ -237,13 +267,11 @@ static inline size_t ccarray_lowerbound(const ccarray_t * c, size_t beg, size_t 
 
 static inline int ccarray_create_slots( ccarray_t ** a, ccarray_t ** apool, size_t num_slots, size_t item_size )
 {
-  if ( !( *a = ccarray_create(num_slots, item_size) ) )
-  {
+  if ( !( *a = ccarray_create(num_slots, item_size) ) ) {
     return -1;
   }
 
-  if ( !( *apool = ccarray_create(num_slots, item_size) ) )
-  {
+  if ( !( *apool = ccarray_create(num_slots, item_size) ) ) {
     ccarray_destroy(*a), *a = 0;
     return -1;
   }
@@ -255,14 +283,12 @@ static inline int ccarray_create_slots( ccarray_t ** a, ccarray_t ** apool, size
 
 static inline void ccarray_destroy_slots( ccarray_t ** a, ccarray_t ** apool )
 {
-  if ( *a )
-  {
+  if ( *a ) {
     ccarray_destroy(*a);
     *a = 0;
   }
 
-  if ( *apool )
-  {
+  if ( *apool ) {
     ccarray_destroy(*apool);
     *apool = 0;
   }
@@ -273,13 +299,11 @@ static inline int ccarray_create_pslots( ccarray_t ** aq, ccarray_t ** ap, size_
 {
   size_t i, j;
 
-  if ( !( *aq = ccarray_create(num_slots, sizeof(void *)) ) )
-  {
+  if ( !( *aq = ccarray_create(num_slots, sizeof(void *)) ) ) {
     return -1;
   }
 
-  if ( !( *ap = ccarray_create(num_slots, sizeof(void *)) ) )
-  {
+  if ( !( *ap = ccarray_create(num_slots, sizeof(void *)) ) ) {
     ccarray_destroy(*aq), *aq = 0;
     return -1;
   }
@@ -287,14 +311,12 @@ static inline int ccarray_create_pslots( ccarray_t ** aq, ccarray_t ** ap, size_
   for ( i = 0; i < num_slots; ++i )
   {
     void * p = calloc(1, slot_size);
-    if ( p )
-    {
+    if ( p ) {
       ccarray_push_back(*ap, &p);
     }
     else
     {
-      for ( j = 0; j < i; ++j )
-      {
+      for ( j = 0; j < i; ++j ) {
         ccarray_pop_back(*ap, &p);
         free(p);
       }
@@ -317,8 +339,7 @@ static inline void ccarray_destroy_pslots( ccarray_t ** aq, ccarray_t ** ap )
     while ( ccarray_size(*aq) > 0 )
     {
       ccarray_pop_back(*aq, &p);
-      if ( p )
-      {
+      if ( p ) {
         free(p);
       }
     }
@@ -330,8 +351,7 @@ static inline void ccarray_destroy_pslots( ccarray_t ** aq, ccarray_t ** ap )
     while ( ccarray_size(*ap) > 0 )
     {
       ccarray_pop_back(*ap, &p);
-      if ( p )
-      {
+      if ( p ) {
         free(p);
       }
     }
