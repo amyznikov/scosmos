@@ -29,7 +29,7 @@ function pid = popenq( fname, columns )
       headers = strsplit(headline," \t\n\r");
       cnames  = strsplit(columns," \t\r\n;,");
 
-      cmd = "awk '{ print ";
+      cmd = 'awk ''{ print ';
 
       for i = 1 : size(cnames,2)
 
@@ -40,16 +40,16 @@ function pid = popenq( fname, columns )
         end
 
        if ( j >= size(headers,2) )
-          error ("no column '%s' found in '%s'",cnames{i}, fname);
+          error ('no column ''%s'' found in ''%s''',cnames{i}, fname);
         end
 
-        cmd = cstrcat(cmd, sprintf("$%d",j));
+        cmd = cstrcat(cmd, sprintf('$%d',j));
         if ( i < size(cnames,2) )
-          cmd = cstrcat(cmd,"\"\t\"");
+          cmd = cstrcat(cmd,'"\t"');
         end
       end
 
-      cmd = cstrcat(cmd, sprintf("}' \"%s\"", fname));
+      cmd = cstrcat(cmd, sprintf('}'' \"%s\"', fname));
 
       pid = popen(cmd,'r');
       if ( pid != -1 )

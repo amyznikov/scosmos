@@ -22,17 +22,17 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surve
   % Use popenq() to grow flexibility and reduce memory pressure
   
   fname = sprintf('refs/%d/%s/%d.dat',surveyid, refname, plateid);
-  fid = popenq(fname, "ra,dec,x,y,smag" );
+  fid = popenq(fname, 'ra,dec,x,y,smag' );
   if ( fid == -1 )
-    fprintf(stderr, "popenq(%s) fails\n", fname);
+    fprintf(stderr, 'popenq(%s) fails\n', fname);
     return;
   end
   
-  v  = fscanf(fid, "%lf", [5, Inf])';
+  v  = fscanf(fid, '%lf', [5, Inf])';
   pclose(fid);
 
   if ( size(v) < 1 )
-    fprintf(stderr, "empty file %s \n", fname);
+    fprintf(stderr, 'empty file %s \n', fname);
     return;
   end
 
@@ -43,8 +43,8 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surve
   x    = v(:,3) - X0;
   y    = v(:,4) - Y0;
   mag  = v(:,5);
-  
-  
+
+
   if ( nargin > 3 )
     cond = mag >= minmag;
     if ( ~all(cond) )
@@ -55,25 +55,25 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surve
       mag  = mag(cond);
     end
   end  
-  
-  
+
+
   if ( nargin > 4 )
     cond = mag <= minmag;
-	  if ( ~all(cond) )
-	    ra   = ra(cond);
-	    dec  = dec(cond);
-	    x    = x(cond);
-	    y    = y(cond);
-	    mag  = mag(cond);
-	  end
-	end  
-  
+    if ( ~all(cond) )
+      ra   = ra(cond);
+      dec  = dec(cond);
+      x    = x(cond);
+      y    = y(cond);
+      mag  = mag(cond);
+    end
+  end  
+
 
   if ( max(ra) - min(ra) > pi )
     cond = ra > pi;
     ra (cond) = ra (cond) - 2 * pi;
   end
-     
+
   [xtan, ytan] = cs2tan(A0, D0, ra, dec);
 
 end

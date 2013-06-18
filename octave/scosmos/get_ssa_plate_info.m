@@ -19,9 +19,9 @@
 
 function [A0, D0, EPOCH, X0, Y0] = get_ssa_plate_info( surveyid, plateid )
 
-  sqlCmd = sprintf("select rapnt, decpnt, epoch, xpnt, ypnt from ssa_plates where surveyid=%d and plateid=%d",
+  sqlCmd = sprintf('select rapnt, decpnt, epoch, xpnt, ypnt from ssa_plates where surveyid=%d and plateid=%d',
                     surveyid, plateid);
-  
+
   A = sscanf( pgquery(sqlCmd) , '%lf' );
   A0 = A(1,1) * pi / 180;
   D0 = A(2,1) * pi / 180;

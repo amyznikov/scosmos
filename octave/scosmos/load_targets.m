@@ -53,14 +53,14 @@ function [ objID xmin xmax ymin ymax area ipeak cosmag isky \
   %
 
   pipecmd = generate_plate_pipe_command( surveyid, plateid );
-  if ( strcmp(pipecmd,"") )
-    fprintf(stderr,"Can not locate plateid file for surveyid:%d plateid:%d\n", surveyid, plateid);
+  if ( strcmp(pipecmd,'') )
+    fprintf(stderr,'Can not locate plate file for surveyid:%d plateid:%d\n', surveyid, plateid);
     return;
   end
   
-  fid = popen(pipecmd, "r");
+  fid = popen(pipecmd, 'r');
   if ( fid == -1 )
-    fprintf(stderr,"popen('%s') fails\n", pipecmd);
+    fprintf(stderr,'popen("%s") fails\n', pipecmd);
     return;
   end
   
@@ -111,23 +111,23 @@ function pipecmd = generate_plate_pipe_command( surveyid, plateid )
 
   dataloc = get_ssa_data_location( surveyid );
 
-  fname = sprintf("%s/%d-%d.clean.dat", dataloc, surveyid, plateid);
-  if ( exist(fname,"file") )
-    pipecmd = sprintf("ssa-plate-dump %s",fname)
+  fname = sprintf('%s/%d-%d.clean.dat', dataloc, surveyid, plateid);
+  if ( exist(fname,'file') )
+    pipecmd = sprintf('ssa-plate-dump %s',fname)
     return;
   end
   
  
-  fname = sprintf("%s/%d-%d.clean.dat.bz2", dataloc, surveyid, plateid);
-  if ( exist(fname,"file") )
-    pipecmd = sprintf("ssa-plate-dump -j %s",fname);
+  fname = sprintf('%s/%d-%d.clean.dat.bz2', dataloc, surveyid, plateid);
+  if ( exist(fname,'file') )
+    pipecmd = sprintf('ssa-plate-dump -j %s',fname);
     return;
   end
 
 
-  fname = sprintf("%s/%d-%d.dat", dataloc, surveyid, plateid);
-  if ( exist(fname,"file") )
-    pipecmd = sprintf("ssa-plate-dump -c %s",fname);
+  fname = sprintf('%s/%d-%d.dat', dataloc, surveyid, plateid);
+  if ( exist(fname,'file') )
+    pipecmd = sprintf('ssa-plate-dump -c %s',fname);
     return;
   end
   

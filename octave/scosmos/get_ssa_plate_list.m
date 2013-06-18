@@ -9,5 +9,5 @@
 %       platelist = get_ssa_plate_list(1);
 %
 function platelist = get_ssa_plate_list(surveyid)
-  platelist = sscanf( pgquery("select plateid from ssa_plates where surveyid=%d", surveyid), "%d");
+  platelist = sscanf( pgquery('select plateid from ssa_plates where surveyid=%d', surveyid), '%d');
 end
