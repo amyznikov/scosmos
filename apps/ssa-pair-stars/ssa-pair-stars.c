@@ -266,6 +266,7 @@ static void show_usage( FILE * output, int argc, char * argv[] )
   fprintf(output, "  cap1=<size_t>      set initial capacity of first star list\n");
   fprintf(output, "  cap2=<size_t>      set initial capacity of second star list\n");
   fprintf(output, "  dups={keep,drop}   What to do with multiple detections?\n");
+  fprintf(output, "  -d                 Write coordinate differences in additional columns\n");
   fprintf(output, "  -i                 Invert match\n");
   fprintf(output, "  -v                 Print some diagnostic messages to stderr (verbose mode)\n");
   fprintf(output, "  \n");
@@ -324,6 +325,7 @@ int main(int argc, char *argv[])
 
   char head[2][MAX_HEADER_LENGTH];
 
+  int append_diffs = 0;
   int dups_mode = dups_drop;
   int beverbose = 0;
   int invert_match = 0;
@@ -346,77 +348,77 @@ int main(int argc, char *argv[])
     {
       if ( sscanf(argv[i] + 4, "%d", &rc[0]) != 1 || rc[0] < 1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "rc2=", 4) == 0 )
     {
       if ( sscanf(argv[i] + 4, "%d", &rc[1]) != 1 || rc[1] < 1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "dc1=", 4) == 0 )
     {
       if ( sscanf(argv[i] + 4, "%d", &dc[0]) != 1 || dc[0] < 1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "dc2=", 4) == 0 )
     {
       if ( sscanf(argv[i] + 4, "%d", &dc[1]) != 1 || dc[1] < 1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "ru1=", 4) == 0 )
     {
       if ( (ru[0] = parse_unit(argv[i] + 4)) == -1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "ru2=", 4) == 0 )
     {
       if ( (ru[1] = parse_unit(argv[i] + 4)) == -1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "du1=", 4) == 0 )
     {
       if ( (du[0] = parse_unit(argv[i] + 4)) == -1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "du2=", 4) == 0 )
     {
       if ( (du[1] = parse_unit(argv[i] + 4)) == -1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "r=", 2) == 0 )
     {
       if ( sscanf(argv[i] + 2, "%lf", &r) != 1 || r <= 0 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "cap1=", 5) == 0 )
     {
       if ( sscanf(argv[i] + 5, "%zu", &capacity[0]) != 1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "cap2=", 5) == 0 )
     {
       if ( sscanf(argv[i] + 5, "%zu", &capacity[1]) != 1 ) {
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
     else if ( strncmp(argv[i], "dups=", 5) == 0 )
@@ -432,14 +434,22 @@ int main(int argc, char *argv[])
       }
       else {
         fprintf(stderr,"Invalid value of dups mode %s\n", argv[i]);
-        return -1;
+        return 1;
       }
     }
-    else if ( strcmp(argv[i], "-i") == 0 ) {
-      invert_match = 1;
-    }
-    else if ( strcmp(argv[i], "-v") == 0 ) {
-      beverbose = 1;
+    else if ( *argv[i] == '-' )
+    {
+      const char * opt = argv[i] + 1;
+
+      for ( ; *opt ; ++opt )
+      {
+        switch ( *opt ) {
+        case 'i': invert_match = 1; break;
+        case 'v': beverbose = 1; break;
+        case 'd': append_diffs = 1; break;
+        default : fprintf(stderr, "Invalid key '%c' in argument '%s'\n", *opt, argv[i]); return 1;
+        }
+      }
     }
     else if ( !fname[0] ) {
       fname[0] = argv[i];
@@ -527,6 +537,7 @@ int main(int argc, char *argv[])
       fprintf(stderr, "Can't read '%s': %s\n", fname[i], strerror(errno));
       return -1;
     }
+
     if ( load_objects(fp[i], rc[i], dc[i], ru[i], du[i], head[i], list[i]) != 0 ) {
       fprintf(stderr, "Can't load %s\n", fname[i]);
       return -1;
@@ -534,11 +545,11 @@ int main(int argc, char *argv[])
     close_file( fp[i], compression[i] );
 
     if ( beverbose ) {
-      fprintf(stderr,"%s: %zu objects\n", fname[i], ccarray_size(list[i]));
+      fprintf(stderr,"%s: %zu rows\n", fname[i], ccarray_size(list[i]));
     }
 
     if ( ccarray_size(list[i]) == capacity[i] && !feof(fp[i]) ) {
-      fprintf(stderr, "load_objects() fails for %s: Too many objects. Try increase capacity1 (currently %zu)\n",
+      fprintf(stderr, "load_objects() fails for %s: Too many objects. Try increase capacity (currently %zu)\n",
           fname[i], capacity[i]);
       return -1;
     }
@@ -560,7 +571,8 @@ int main(int argc, char *argv[])
     fprintf(stderr,"search pairs...\n");
   }
 
-  printf("%s\t%s\tdra\tddec\tdr\n", head[0], head[1]);
+  /* print header line */
+  printf("%s\t%s%s", head[0], head[1], append_diffs ? "\tdra\tddec\tdr\n" : "\n");
 
   size1 = ccarray_size(list[0]);
   size2 = ccarray_size(list[1]);
@@ -570,7 +582,7 @@ int main(int argc, char *argv[])
     double dra[MAX_PAIRS];
     double ddec[MAX_PAIRS];
     double dr[MAX_PAIRS];
-    const obj_t * pairs[MAX_PAIRS] = {0};
+    const obj_t * pairs[MAX_PAIRS];
     size_t numpairs = 0;
 
     const obj_t * obj1 = ccarray_peek(list[0], pos1);
@@ -600,8 +612,8 @@ int main(int argc, char *argv[])
       }
     }
 
-    if ( invert_match ) {
-      if ( numpairs < 1 ) {
+    if ( numpairs < 1 ) {
+      if ( invert_match ) {
         printf("%s\n", obj1->line);
       }
     }
@@ -612,26 +624,30 @@ int main(int argc, char *argv[])
       case dups_drop:
         if ( numpairs == 1 )
         {
-          printf("%s\t%s\t%+9.3f\t%+9.3f\t%+9.3f\n",
-              obj1->line,
-              pairs[0]->line,
-              dra[0] * 180 * 3600 / PI,
-              ddec[0] * 180 * 3600 / PI,
-              dr[0] * 180 * 3600 / PI
-              );
+          printf("%s\t%s", obj1->line, pairs[0]->line);
+
+          if ( !append_diffs ) {
+            printf("\n");
+          }
+          else {
+            printf("\t%+9.3f\t%+9.3f\t%+9.3f\n", dra[0] * 180 * 3600 / PI, ddec[0] * 180 * 3600 / PI,
+                dr[0] * 180 * 3600 / PI);
+          }
         }
         break;
 
       case dups_keep:
         for ( pos2 = 0; pos2 < numpairs; ++pos2 )
         {
-          printf("%s\t%s\t%+9.3f\t%+9.3f\t%+9.3f\n",
-              obj1->line,
-              pairs[pos2]->line,
-              dra[pos2] * 180 * 3600 / PI,
-              ddec[pos2] * 180 * 3600 / PI,
-              dr[pos2] * 180 * 3600 / PI
-              );
+          printf("%s\t%s", obj1->line, pairs[pos2]->line);
+
+          if ( !append_diffs ) {
+            printf("\n");
+          }
+          else {
+            printf("%+9.3f\t%+9.3f\t%+9.3f\n", dra[pos2] * 180 * 3600 / PI, ddec[pos2] * 180 * 3600 / PI,
+                dr[pos2] * 180 * 3600 / PI);
+          }
         }
         break;
 

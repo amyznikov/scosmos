@@ -91,6 +91,7 @@ static void show_usage( FILE * output )
   fprintf(output,"   -c  drop parents of deblends\n");
   fprintf(output,"   -b  output in SuperCOSMOS binary format (useful to cleanup plate from junk and parents)\n");
   fprintf(output,"   -f  apply junk filter\n");
+  fprintf(output,"   -F  do not apply junk filter\n");
   fprintf(output,"   -o  set output file name from next argument\n");
   fprintf(output,"   -u  output RA/DEC in units specified in next argument {deg,rad} \n");
   fprintf(output,"   minmag=float  minimal (bright) output magnitude\n");
@@ -317,8 +318,8 @@ static int dump_header_line( FILE * output, int output_opts )
         "ipeak\t"
         "cosmag\t"
         "isky\t"
-        "xCen\t"
-        "yCen\t"
+        "x\t"
+        "y\t"
         "aU\t"
         "bU\t"
         "thetaU\t"
@@ -590,6 +591,9 @@ int main(int argc, char *argv[])
           break;
         case 'f':
           output_opts |= OUTPUT_FJUNK;
+          break;
+        case 'F':
+          output_opts &= ~OUTPUT_FJUNK;
           break;
         case 'v':
           output_opts |= OUTPUT_VERBOSE;
