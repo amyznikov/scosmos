@@ -15,12 +15,17 @@ function prepare_reference_stars( plateid, refnames )
   sid = ssa_surveyid(plateid);
   [A0, D0, EPOCH] = ssa_plate_info( plateid );
   
-  for i = 1:size(refnames)
+  for i = 1:size(refnames,2)
   
     refname = refnames{i}; 
 
-    dirname = sprintf("refs/%d/%s", sid, refname );
-    outname = sprintf("%s/%d.dat", dirname, plateid );
+    dirname = sprintf('refs/%d/%s', sid, refname );
+    outname = sprintf('%s/%d.dat', dirname, plateid );
+    if ( exist(outname,'file') )
+      printf('%d looks processed as ''%s'' : skip it\n', plateid, outname );
+      continue;
+    end
+    
     syscall('mkdir -p %s', dirname );
     
 	  if ( strcmp(refname,'ucac4') )

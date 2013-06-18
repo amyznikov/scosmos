@@ -1,17 +1,17 @@
-#! /usr/bin/octave -q
+#! /usr/bin/octave -qf
 
 format short;
-ignore_function_time_stamp('all');
+ignore_function_time_stamp("all");
 
 arg_list = argv ();
 
 if ( nargin != 2 )
   printf ("Usage:\n");
-  printf ("  %s reference-catalog-name surveyid_or_plateid\n", program_name ());
+  printf ("  %s reference-catalog-name surveyid-or-plateid\n", program_name ());
   return;
 end
 
-refs = strsplit(arg_list{1},",; ")';
+refs = strsplit(arg_list{1},",; ");
 platenames = strsplit(arg_list{2},",; ");
 
 plateid=zeros(size(platenames,2),1);
@@ -35,7 +35,7 @@ for i=1:size(plateid)
     pid = plate_list(j);
     sid = ssa_surveyid(pid);
     
-    printf('\n***\nPLATE %d/%d\n', sid, pid);
+    printf("\n***\nPLATE %d/%d\n", sid, pid);
     prepare_reference_stars( pid, refs );
   end
   
