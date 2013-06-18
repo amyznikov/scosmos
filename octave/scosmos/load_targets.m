@@ -131,13 +131,13 @@ function pipecmd = generate_plate_pipe_command( surveyid, plateid )
     return;
   end
   
-  fname = sprintf("%s/%d-%d.dat.bz2", dataloc, surveyid, plateid);
-  if ( exist(fname,"file") )
-    pipecmd = sprintf("ssa-plate-dump -cj %s",fname);
+  fname = sprintf('%s/%d-%d.dat.bz2', dataloc, surveyid, plateid);
+  if ( exist(fname,'file') )
+    pipecmd = sprintf('ssa-plate-dump -cj %s',fname);
     return;
   end
   
-  pipecmd = "";
+  pipecmd = '';
   
 end
 
