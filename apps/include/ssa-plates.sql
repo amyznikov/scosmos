@@ -1,4 +1,10 @@
+--
+-- @See http://surveys.roe.ac.uk/ssa/www/ssa_browser.html / Plate
+--
+
 drop table if exists ssa_plates;
+
+
 create table ssa_plates (
   plateID       int4,               -- 4     Unique identifier of the plate: surveyID plus field number combo
   surveyID      int2,               -- 1     Every plate comes from a survey

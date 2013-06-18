@@ -1,0 +1,1 @@
+../../apps/include/ssa-plate.sql
