@@ -1,11 +1,11 @@
 %
-% [xmin, xmax, ymin, ymax ] = get_ssa_plate_bounds( surveyid )
+% [xmin, xmax, ymin, ymax ] = ssa_plate_bounds( surveyid )
 %   Return the range of measured plate coordinates (microns), refered to plate center X0, Y0
 %
 %   Arguments:
-%       surveyid : surveyid (0..9) from ssa_plates table
+%       surveyid : surveyid (1..9) from ssa_plates table
 %
-function [ xmin, xmax, ymin, ymax ] = get_ssa_plate_bounds( surveyid )
+function [ xmin, xmax, ymin, ymax ] = ssa_plate_bounds( surveyid )
 
   A = sscanf(pgquery('select max(axmin),min(axmax),max(aymin),min(aymax) from ssa_plates where surveyid=%d', surveyid),'%lf');
   

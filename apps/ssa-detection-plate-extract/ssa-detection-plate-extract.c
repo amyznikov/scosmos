@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
           return 2;
         }
 
-        sprintf(fname,"%d-%d.dat", surveyid, plateid);
+        sprintf(fname,"%d.dat", plateid);
 
         fprintf(stderr, "creating %s\n", fname);
         plates[numplates].fd = open(fname, oflags, omode);
@@ -179,7 +179,7 @@ int main(int argc, char *argv[])
       ssa_detection_convert(&obj1, &obj2);
 
       if ( write(plates[plate_index].fd, &obj2, sizeof(obj2)) != sizeof(obj2) ) {
-        fprintf(stderr, "Can't write '%d-%d.dat': %s\n", surveyid, plateid, strerror(errno));
+        fprintf(stderr, "Can't write '%d.dat': %s\n", plateid, strerror(errno));
         return 4;
       }
     }

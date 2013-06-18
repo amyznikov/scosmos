@@ -1,5 +1,5 @@
 %
-% load_targets( surveyid, plateid )  
+% load_targets( plateid )  
 %   Load scosmos target stars from scosmos binary file
 %
 %   Important Note:
@@ -10,7 +10,7 @@
 function [ objID xmin xmax ymin ymax area ipeak cosmag isky \
   xCen yCen aU bU thetaU aI bI thetaI class pa \
   ap1 ap2 ap3 ap4 ap5 ap6 ap7 ap8 \
-  blend quality prfStat prfMag gMag sMag ] = load_targets( surveyid, plateid )
+  blend quality prfStat prfMag gMag sMag ] = load_targets( plateid )
 
   %
   % Piped columns are:
@@ -52,9 +52,9 @@ function [ objID xmin xmax ymin ymax area ipeak cosmag isky \
   % 36 sMag
   %
 
-  pipecmd = gen_plate_pipe_command( surveyid, plateid );
+  pipecmd = get_plate_pipe_command( plateid );
   if ( strcmp(pipecmd,'') )
-    fprintf(stderr,'Can not locate plate file for surveyid:%d plateid:%d\n', surveyid, plateid);
+    fprintf(stderr,'Can not locate plate file for plateid:%d\n', plateid);
     return;
   end
   

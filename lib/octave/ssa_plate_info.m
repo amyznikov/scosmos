@@ -1,9 +1,8 @@
 %
-% [A0, D0, EPOCH, X0, Y0] = get_ssa_plate_info( surveyid, plateid )
+% [A0, D0, EPOCH, X0, Y0] = ssa_plate_info( surveyid, plateid )
 %   Return plate center and observation epoch for given plate.
 % 
 %   Args:
-%       surveyid: SSA survey number (0..9)
 %       plateid : SSA plate id as returned from get_ssa_plate_list()
 %
 %   Return:
@@ -14,13 +13,12 @@
 %       Y0     : Centre of scan area in Y, microns
 %  
 %   Example : 
-%       [A0, D0, EPCH, X0, Y0] = get_ssa_plate_info( 1, 66109);
+%       [A0, D0, EPCH, X0, Y0] = ssa_plate_info( 66109);
 %
 
-function [A0, D0, EPOCH, X0, Y0] = get_ssa_plate_info( surveyid, plateid )
+function [A0, D0, EPOCH, X0, Y0] = ssa_plate_info( plateid )
 
-  sqlCmd = sprintf('select rapnt, decpnt, epoch, xpnt, ypnt from ssa_plates where surveyid=%d and plateid=%d',
-                    surveyid, plateid);
+  sqlCmd = sprintf('select rapnt, decpnt, epoch, xpnt, ypnt from ssa_plates where plateid=%d', plateid);
 
   A = sscanf( pgquery(sqlCmd) , '%lf' );
   A0 = A(1,1) * pi / 180;

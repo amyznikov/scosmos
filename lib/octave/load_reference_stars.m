@@ -1,14 +1,14 @@
 %
-% [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surveyid, plateid [, minmag [, maxmag] ] )
+% [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, plateid [, minmag [, maxmag] ] )
 %   Load prepared reference stars from refs/<surveyid>/<refname>/<plateid>.dat.
 %   The x and y are refered to plate center X0, Y0
 %
 %   Usage:
-%     [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( 'ucac4', 1, 66378 );
+%     [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( 'ucac4', 66378 );
 %
 %
 
-function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surveyid, plateid, minmag, maxmag )
+function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, plateid, minmag, maxmag )
 
   x   = [];
   y   = [];
@@ -19,10 +19,10 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surve
   ytan= [];
 
   
-  % Use popenq() to grow flexibility and reduce memory pressure
+  % Use popenq() for more flexibility and reduce memory pressure
   
-  fname = sprintf('refs/%d/%s/%d.dat',surveyid, refname, plateid);
-  fid = popenq(fname, 'ra,dec,x,y,smag' );
+  fname = sprintf('refs/%d/%s/%d.dat', ssa_surveyid(plateid), refname, plateid);
+  fid = popenq(fname, 'ra,dec,x,y,sMag' );
   if ( fid == -1 )
     fprintf(stderr, 'popenq(%s) fails\n', fname);
     return;
@@ -36,7 +36,7 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, surve
     return;
   end
 
-  [A0, D0, ~, X0, Y0] = get_ssa_plate_info( surveyid, plateid );
+  [A0, D0, ~, X0, Y0] = ssa_plate_info( plateid );
 
   ra   = v(:,1);
   dec  = v(:,2);
