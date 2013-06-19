@@ -1,0 +1,107 @@
+#! /bin/bash
+
+
+FLIST=""
+
+while [[ -n $1 ]];
+do 
+    FLIST="$FLIST $1"
+    shift
+done
+
+if [[ -z "$FLIST" ]]; then
+    echo "Usage:"
+    echo "  scosmos-plot-plate-residuals FILE [...]";
+    exit 1;
+fi
+
+
+
+PT="p pt 7 ps 0.1"
+mmin="+10"
+mmax="+20"
+xmin="-170000"
+xmax="+170000"
+ymin="-170000"
+ymax="+170000"
+dmin="-1.5"
+dmax="+1.5"
+
+{
+cat << EOF
+
+ set term post enhanced font "Arial,10"
+
+ do for [ datafile in "$FLIST" ] {
+ 
+    fname = system(sprintf("basename %s", datafile))  
+    print fname;
+    epsname = sprintf("%s.eps",fname);
+    pdfname = sprintf("%s.pdf",fname);
+    jpgname = sprintf("%s.jpg",fname);
+
+    # check if output xy file already exists
+    if ( strlen(system(sprintf("file %s | fgrep 'ERROR:'", epsname))) == 0 ) {
+        print fname . ' exists. skip plot generation';
+    } 
+    else {
+      #############################################################
+      
+      set output epsname
+      set title fname 
+      set grid xtics ytics lt 1 lc rgb 'gray' lw 0.1
+      set xtics font ',6'
+      set ytics font ',6'
+
+      set xrange [$xmin:$xmax]
+      set yrange [$dmin:$dmax]
+      set xlabel 'x, mkm'
+      set ylabel 'dx, arcsec'
+      plot datafile u (column('x')):(column('dx')) w $PT not 
+    
+      
+      set xrange [$xmin:$xmax]
+      set yrange [$dmin:$dmax]
+      set xlabel 'x, mkm'
+      set ylabel 'dy, arcsec'
+      plot datafile u (column('x')):(column('dy')) w $PT not 
+    
+      
+      set xrange [$ymin:$ymax]
+      set yrange [$dmin:$dmax]
+      set xlabel 'y, mkm'
+      set ylabel 'dx, arcsec'
+      plot datafile u (column('x')):(column('dx')) w $PT not 
+        
+
+      set xrange [$ymin:$ymax]
+      set yrange [$dmin:$dmax]
+      set xlabel 'y, mkm'
+      set ylabel 'dy, arcsec'
+      plot datafile u (column('x')):(column('dy')) w $PT not 
+        
+
+      set xrange [$mmin:$mmax]
+      set yrange [$dmin:$dmax]
+      set xlabel 'mag'
+      set ylabel 'dx, arcsec'
+      plot datafile u (column('mag')):(column('dx')) w $PT not 
+
+
+      set xrange [$mmin:$mmax]
+      set yrange [$dmin:$dmax]
+      set xlabel 'mag'
+      set ylabel 'dy, arcsec'
+      plot datafile u (column('mag')):(column('dy')) w $PT not 
+     
+      system(sprintf("ps2pdf %s %s", epsname, pdfname));
+        
+      #############################################################
+    }
+ }
+    
+
+EOF
+} | gnuplot
+ 
+

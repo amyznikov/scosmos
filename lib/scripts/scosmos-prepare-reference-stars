@@ -14,7 +14,7 @@ end
 refs = strsplit(arg_list{1},",; ");
 platenames = strsplit(arg_list{2},",; ");
 
-plateid=zeros(size(platenames,2),1);
+plateid = zeros(size(platenames,2),1);
 for i = 1:size(plateid)
   plateid(i) = str2num(platenames{i}); 
 end

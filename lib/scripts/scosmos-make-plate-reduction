@@ -1,0 +1,203 @@
+#! /usr/bin/octave -qf
+
+format short;
+ignore_function_time_stamp("all");
+
+
+###########################################################################
+
+arg_list = argv ();
+
+if ( nargin < 1 )
+  printf ("Usage:\n");
+  printf ("  %s  [-gc] [-K threshold] reference-catalog-name plateid [...]\n", program_name ());
+  printf ("Example\n");
+  printf ("  %s ucac4 1\n", program_name ());
+  return;
+end
+
+
+refname = "";
+gc = 0;
+K = 3;
+plateids = [];
+
+
+i = 0;
+while  ( ++i <= nargin )
+
+  arg = arg_list{i};
+  
+  if ( strcmp(arg,"-gc") )
+    gc = 1;
+    continue;
+  end
+
+  if ( strcmp(arg,"-K") )
+  
+    if ( i++ > nargin )
+      fprintf(stderr,"Error: missing value after -K argument\n");
+      return;
+    end
+    
+    [K, status] = str2num(arg_list{i});
+    if ( !status || size(K,1) != 1 )
+	    fprintf(stderr,"Error: invalid value for K threshold: %s\n", arg_list{i});
+	    return;
+    end
+
+    printf("USING K=%d\n", K);
+    
+    continue;
+  end
+  
+  [x, state] = str2num(arg);
+  if ( state )
+    for j=1:size(x,2)
+      plateids(size(plateids,2)+1) = x(j);
+    end
+    continue;
+  end
+  
+  if ( strcmp(refname,"") )
+    refname = arg;
+    continue;
+  end
+  
+  fprintf(stderr,"Invalid argument %s\n", arg);
+  return;
+end
+
+
+###########################################################################
+
+function make_reduction( refname, plate_list, gc, K )
+
+  spath = "scosmos";
+  cpath = "reduction-residuals";
+
+  syscall(sprintf("mkdir -p %s", cpath));
+  if ( gc )
+    syscall(sprintf("mkdir -p %s", spath));
+  end
+
+  for i = 1:size(plate_list,1)
+
+    pid = plate_list(i);
+
+    cname = sprintf("%s/%d.dat",cpath,pid);
+    sname = sprintf("%s/%d.dat",spath,pid);
+
+    if ( exist(cname,"file") && (!gc || exist(sname,"file")) )
+      printf("%d looks processed: skip it\n", pid);
+      continue;
+    endif
+    
+    # get plate info
+    [A0, D0, EPOCH, X0, Y0] = ssa_plate_info( pid );
+    printf("plate:  %d\n"  , pid );
+    printf("A0   :  %g\n"  , A0 * 180 / pi );
+    printf("D0   :  %+g\n" , D0 * 180 / pi );
+    printf("EPOCH:  %.3f\n", EPOCH );
+
+    # load reference stars
+    [x, y, mag, xtan, ytan, ra, dec ] = load_reference_stars( refname, pid );
+    if ( size(x) < 150 )
+      printf("Too small number of reference stars: %d\n", size(x,1));
+      continue;
+    endif
+
+    
+    # make reduction x,y -> xtan,ytan
+    [coefx, coefy ] = cxy2tan( K, x, y, xtan, ytan, @xy2tan );
+    
+    
+    # calc residuals
+    [mx, my] = xy2tan(x,y);
+    dx = (xtan - mx * coefx) * 180*3600 / pi;
+    dy = (ytan - my * coefy) * 180*3600 / pi;
+
+
+    # save residuals
+    fid = fopen(cname,"w");
+    fprintf(fid,"ra\tdec\tmag\tx\ty\txtan\tytan\tdx\tdy\n");
+    fprintf(fid,"%+15.9f\t%+15.9f\t%+8.3f\t%+12.2f\t%+12.2f\t%+20.15E\t%+20.15E\t%+8.3f\t%+8.3f\n", 
+      transpose([ra dec mag x y xtan ytan dx dy]));
+    fclose(fid);
+    printf("%s saved\n", cname);
+
+
+
+    # apply solution for target stars
+    if ( !gc )
+      continue;
+    end
+
+
+    [ objID xmin xmax ymin ymax area ipeak cosmag isky \
+       x y aU bU thetaU aI bI thetaI class pa ap1 ap2 ap3 ap4 ap5 ap6 ap7 ap8 \
+        blend quality prfStat prfMag gMag sMag ] = load_targets( plateid );
+
+
+    if ( size( objID ) < 1 ) 
+      fprintf(stderr,"load_targets(pid=%d) fails", pid );
+      continue;
+    end
+
+    xmin -= X0;
+    ymin -= Y0;
+    xmax -= X0;
+    ymax -= Y0;
+    x    -= X0;
+    y    -= Y0;
+
+    # generate model 
+    [mx, my] = xy2tan(x, y);
+
+    # apply model
+    xtan = mx * coefx;
+    ytan = my * coefy;
+
+    # convert to celestial sphere
+    [ra, dec] = tan2cs(A0, D0, xtan, ytan );
+
+    # generate ecpoch column
+    epoch = EPOCH * ones(size(objID));
+
+    # write generated catalog
+    fid = fopen(sname,"w");
+    fprintf(fid,"objID\tra\tdec\tepoch\txmin\txmax\tymin\tymax\tarea\tipeak\tcosmag\tisky\tx\ty\taU\tbU\tthetaU\taI\tbI\tthetaI\tclass\tpa\tap1\tap2\tap3\tap4\tap5\tap6\tap7\tap8\tblend\tquality\tprfStat\tprfMag\tgMag\tsMag\n");
+    fprintf(fid,"%9d\t%+15.9f\t%+15.9f\t%+9.3f\t%+10.2f\t%+10.2f\t%+10.2f\t%+10.2f\t%6d\t%10d\t%+8.3f\t%10d\t%+10.2f\t%+10.2f\t%8.2f\t%8.2f\t%3d\t%8.2f\t%8.2f\t%3d\t%1d\t%3d\t%4d\t%4d\t%4d\t%4d\t%4d\t%4d\t%4d\t%4d\t%3d\t%6d\t%+9.3f\t%+9.3f\t%+9.3f\t%+9.3f\n",
+      transpose([ objID ra dec epoch  xmin xmax ymin ymax area ipeak cosmag isky x y aU bU thetaU aI bI thetaI class pa ap1 ap2 ap3 ap4 ap5 ap6 ap7 ap8 blend quality prfStat prfMag gMag sMag ]));
+    fclose(fid);
+    printf("%s saved\n", sname);
+
+  endfor
+
+end
+
+
+# process in per-plateid basis
+for i=1:size(plateids)
+
+  pid = plateids(i);
+  
+  if ( pid <= 9 )
+    plate_list = ssa_plate_list(pid);
+  else 
+    plate_list = [ pid ];
+  end
+  
+  for j = 1:size(plate_list)
+  
+    pid = plate_list(j);
+    sid = ssa_surveyid(pid);
+
+    printf("\n***\nPLATE %s/%d/%d\n", refname, sid, pid);
+    make_reduction( refname, pid, gc, K );
+  end
+  
+end
+
+
+
