@@ -178,9 +178,11 @@ end
 
 
 # process in per-plateid basis
-for i=1:size(plateids)
+for i=1:size(plateids,2)
 
   pid = plateids(i);
+  disp(pid);
+  continue;
   
   if ( pid <= 9 )
     plate_list = ssa_plate_list(pid);
@@ -198,6 +200,4 @@ for i=1:size(plateids)
   end
   
 end
-
-
 

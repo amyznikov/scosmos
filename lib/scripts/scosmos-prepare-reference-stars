@@ -5,22 +5,34 @@ ignore_function_time_stamp("all");
 
 arg_list = argv ();
 
-if ( nargin != 2 )
+if ( nargin < 2 )
   printf ("Usage:\n");
   printf ("  %s reference-catalog-name surveyid-or-plateid\n", program_name ());
   return;
 end
 
 refs = strsplit(arg_list{1},",; ");
-platenames = strsplit(arg_list{2},",; ");
+plateid = [];
 
-plateid = zeros(size(platenames,2),1);
-for i = 1:size(plateid)
-  plateid(i) = str2num(platenames{i}); 
+
+i = 1;
+while ( ++i <= nargin )
+
+  [x, ok] = str2num(arg_list{i});
+  if ( !ok )
+    fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+    return;
+  end
+
+  for j=1:size(x,2)
+    plateid(size(plateid,2)+1) = x(j);
+  end
+
 end
 
 
-for i=1:size(plateid)
+
+for i=1:size(plateid,2)
 
   pid = plateid(i);
   
