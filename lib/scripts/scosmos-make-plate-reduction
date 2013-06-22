@@ -181,8 +181,6 @@ end
 for i=1:size(plateids,2)
 
   pid = plateids(i);
-  disp(pid);
-  continue;
   
   if ( pid <= 9 )
     plate_list = ssa_plate_list(pid);
