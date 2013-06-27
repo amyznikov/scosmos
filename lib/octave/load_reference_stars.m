@@ -18,21 +18,21 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, plate
   xtan= [];
   ytan= [];
 
-  
+
   % Use popenq() for more flexibility and reduce memory pressure
-  
+
   fname = sprintf('refs/%d/%s/%d.dat', ssa_surveyid(plateid), refname, plateid);
   fid = popenq(fname, 'ra,dec,x,y,sMag' );
   if ( fid == -1 )
     fprintf(stderr, 'popenq(%s) fails\n', fname);
     return;
   end
-  
+
   v  = fscanf(fid, '%lf', [5, Inf])';
   pclose(fid);
 
-  if ( size(v) < 1 )
-    fprintf(stderr, 'empty file %s \n', fname);
+  if ( size(v,1) < 1 || size(v,2) < 1 )
+    fprintf(stderr, '%s: empty file\n', fname);
     return;
   end
 
@@ -54,7 +54,7 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, plate
       y    = y(cond);
       mag  = mag(cond);
     end
-  end  
+  end
 
 
   if ( nargin > 4 )
@@ -66,7 +66,7 @@ function [x, y, mag, xtan, ytan, ra, dec] = load_reference_stars( refname, plate
       y    = y(cond);
       mag  = mag(cond);
     end
-  end  
+  end
 
 
   if ( max(ra) - min(ra) > pi )
