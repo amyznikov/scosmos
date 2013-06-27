@@ -2,6 +2,10 @@
 
 format short;
 ignore_function_time_stamp("all");
+if ( exist(__sub=sprintf("%s/octave",pwd()),'dir' ) )
+  addpath(__sub);
+endif
+
 
 arg_list = argv ();
 

@@ -2,6 +2,9 @@
 
 format short;
 ignore_function_time_stamp("all");
+if ( exist(__sub=sprintf("%s/octave",pwd()),'dir' ) )
+  addpath(__sub);
+endif
 
 
 ###########################################################################
@@ -10,17 +13,22 @@ arg_list = argv ();
 
 if ( nargin < 1 )
   printf ("Usage:\n");
-  printf ("  %s  [-gc] [-K threshold] reference-catalog-name plateid [...]\n", program_name ());
-  printf ("Example\n");
+  printf ("  %s  [-m model] [-mm model] [-gc] [-K threshold] reference-catalog-names plateid [...]\n", program_name ());
+  printf ("Examples\n");
   printf ("  %s ucac4 1\n", program_name ());
+  printf ("  %s ucac4 xsc:15-22  1\n", program_name ());
   return;
 end
 
 
-refname = "";
-gc = 0;
-K = 3;
+gc       = 0;
+K        = 3;
+model    = "";
+usemags  = 0;
 plateids = [];
+refnames = {};
+minmags  = [];
+maxmags  = [];
 
 
 i = 0;
@@ -33,45 +41,97 @@ while  ( ++i <= nargin )
     continue;
   end
 
-  if ( strcmp(arg,"-K") )
-  
+  if ( strcmp(arg,"-K") )  
     if ( i++ > nargin )
       fprintf(stderr,"Error: missing value after -K argument\n");
       return;
-    end
-    
+    end    
     [K, status] = str2num(arg_list{i});
     if ( !status || size(K,1) != 1 )
-	    fprintf(stderr,"Error: invalid value for K threshold: %s\n", arg_list{i});
-	    return;
+      fprintf(stderr,"Error: invalid value for K threshold: %s\n", arg_list{i});
+      return;
+    end
+    continue;
+  end
+
+  if ( strcmp(arg,"-m") )  
+  
+    if ( !strcmp(model,"") )
+      fprintf(stderr,"Error: model already defined as '%s'\n", model);
+      return;
     end
 
-    printf("USING K=%d\n", K);
+    if ( i++ > nargin )
+      fprintf(stderr,"Error: missing model name after -m argument\n");
+      return;
+    end
     
+    model = arg_list{i};
+    continue;
+  end
+  
+  if ( strcmp(arg,"-mm") )  
+  
+    if ( !strcmp(model,"") )
+      fprintf(stderr,"Error: model already defined as '%s'\n", model);
+      return;
+    end
+
+    if ( i++ > nargin )
+      fprintf(stderr,"Error: missing model name after -m argument\n");
+      return;
+    end
+    
+    model = arg_list{i};
+    usemags = 1;
+    continue;
+  end
+  
+  if ( isalpha( arg(1) ) )
+    names = strsplit(arg,",");
+    for j = 1:size(names,2)
+      n = strsplit(names{j},":");
+      refnames{ size(refnames,2) + 1 } = n{1};
+      
+      if ( size(n,2) > 1 )
+        minmags( size(minmags,2) + 1 ) = str2num(n{2});
+      else 
+        minmags( size(minmags,2) + 1 ) = -10;
+      end
+
+      if ( size(n,2) > 2 )
+        maxmags( size(maxmags,2) + 1 ) = str2num(n{3});
+      else 
+        maxmags( size(maxmags,2) + 1 ) = +24;
+      end
+      
+    end
     continue;
   end
   
   [x, state] = str2num(arg);
   if ( state )
     for j=1:size(x,2)
-      plateids(size(plateids,2)+1) = x(j);
+      plateids( size(plateids,2) + 1 ) = x(j);
     end
     continue;
   end
-  
-  if ( strcmp(refname,"") )
-    refname = arg;
-    continue;
-  end
-  
+    
   fprintf(stderr,"Invalid argument %s\n", arg);
   return;
 end
 
+###########################################################################
+
+for i=1:size(refnames,2)
+  printf("%s %g %g\n", refnames{i}, minmags(i), maxmags(i) );
+end;
+
+
 
 ###########################################################################
 
-function make_reduction( refname, plate_list, gc, K )
+function make_reduction( plate_list )
 
   spath = "scosmos";
   cpath = "reduction-residuals";
@@ -100,10 +160,39 @@ function make_reduction( refname, plate_list, gc, K )
     printf("D0   :  %+g\n" , D0 * 180 / pi );
     printf("EPOCH:  %.3f\n", EPOCH );
 
-    # load reference stars
-    [x, y, mag, xtan, ytan, ra, dec ] = load_reference_stars( refname, pid );
-    if ( size(x) < 150 )
-      printf("Too small number of reference stars: %d\n", size(x,1));
+
+    #
+    # load reference stars from all reference catalogues
+    #
+    
+    x    = [];
+    y    = []; 
+    mag  = []; 
+    xtan = []; 
+    ytan = [];  
+    ra   = [];
+    dec  = [];
+    
+    fail = 0;
+    for j = 1:size(refnames,2)
+      [xt, yt, mt, xtant, ytant, rat, dect ] = load_reference_stars( refnames{j}, pid, minmag{j}, maxmag{j} );
+      if  size( xt < 1) 
+        fprintf(stderr,"load_reference_stars(%s) fails\n", refnames{j});
+        fail = 1;
+	break;
+      endif
+	
+      x = [ x; xt ];
+      y = [ y; yt ];
+      mag = [ mag; mt ];
+      xtan = [ xtan; xtant ];
+      ytan = [ ytan; ytant ];
+      ra = [ ra; rat ];
+      dec = [ dec; dect ];
+    endfor
+
+    if ( fail || size(x,2) < 150 )
+      printf("Too small number of reference stars in %s: %d\n",refnames{j}, size(x,2));
       continue;
     endif
 
@@ -128,7 +217,7 @@ function make_reduction( refname, plate_list, gc, K )
 
 
 
-    # apply solution for target stars
+    # check if apply solution for target stars is requested
     if ( !gc )
       continue;
     end
@@ -177,7 +266,8 @@ function make_reduction( refname, plate_list, gc, K )
 end
 
 
-# process in per-plateid basis
+
+# Process plates
 for i=1:size(plateids,2)
 
   pid = plateids(i);
@@ -194,7 +284,7 @@ for i=1:size(plateids,2)
     sid = ssa_surveyid(pid);
 
     printf("\n***\nPLATE %s/%d/%d\n", refname, sid, pid);
-    make_reduction( refname, pid, gc, K );
+    make_reduction( pid );
   end
   
 end
