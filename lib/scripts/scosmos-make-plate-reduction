@@ -24,7 +24,7 @@ end
 gc       = 0;
 K        = 3;
 model    = "";
-usemags  = 0;
+meq      = 0;
 plateids = [];
 refnames = {};
 minmags  = [];
@@ -83,7 +83,7 @@ while  ( ++i <= nargin )
     end
     
     model = arg_list{i};
-    usemags = 1;
+    meq = 1;
     continue;
   end
   
@@ -131,7 +131,7 @@ end;
 
 ###########################################################################
 
-function make_reduction( plate_list )
+function make_reduction( plate_list, gc, K, model, meq, refnames, minmags, maxmags )
 
   spath = "scosmos";
   cpath = "reduction-residuals";
@@ -172,27 +172,34 @@ function make_reduction( plate_list )
     ytan = [];  
     ra   = [];
     dec  = [];
+    cid  = [];
     
     fail = 0;
     for j = 1:size(refnames,2)
-      [xt, yt, mt, xtant, ytant, rat, dect ] = load_reference_stars( refnames{j}, pid, minmag{j}, maxmag{j} );
-      if  size( xt < 1) 
+
+      [xt, yt, mt, xtant, ytant, rat, dect ] = load_reference_stars( refnames{j}, pid, minmags(j), maxmags(j) );
+      printf("%s: %d stars\n", refnames{j}, size(xt,1));
+
+      if  ( size( xt,1) < 1 )
         fprintf(stderr,"load_reference_stars(%s) fails\n", refnames{j});
         fail = 1;
 	break;
       endif
+
 	
-      x = [ x; xt ];
-      y = [ y; yt ];
-      mag = [ mag; mt ];
+      x    = [ x; xt ];
+      y    = [ y; yt ];
+      mag  = [ mag; mt ];
       xtan = [ xtan; xtant ];
       ytan = [ ytan; ytant ];
-      ra = [ ra; rat ];
-      dec = [ dec; dect ];
+      ra   = [ ra; rat ];
+      dec  = [ dec; dect ];
+      cid  = [ cid; j * ones(size(xt)) ];
+
     endfor
 
-    if ( fail || size(x,2) < 150 )
-      printf("Too small number of reference stars in %s: %d\n",refnames{j}, size(x,2));
+    if ( fail || size(x,1) < 150 )
+      printf("Too small number of reference stars: %d\n",size(x,1));
       continue;
     endif
 
@@ -209,12 +216,11 @@ function make_reduction( plate_list )
 
     # save residuals
     fid = fopen(cname,"w");
-    fprintf(fid,"ra\tdec\tmag\tx\ty\txtan\tytan\tdx\tdy\n");
-    fprintf(fid,"%+15.9f\t%+15.9f\t%+8.3f\t%+12.2f\t%+12.2f\t%+20.15E\t%+20.15E\t%+8.3f\t%+8.3f\n", 
-      transpose([ra dec mag x y xtan ytan dx dy]));
+    fprintf(fid,"ra\tdec\tmag\tx\ty\txtan\tytan\tdx\tdy\tcid\n");
+    fprintf(fid,"%+15.9f\t%+15.9f\t%+8.3f\t%+12.2f\t%+12.2f\t%+20.15E\t%+20.15E\t%+8.3f\t%+8.3f\t%d\n", 
+      transpose([ra dec mag x y xtan ytan dx dy cid]));
     fclose(fid);
     printf("%s saved\n", cname);
-
 
 
     # check if apply solution for target stars is requested
@@ -283,8 +289,8 @@ for i=1:size(plateids,2)
     pid = plate_list(j);
     sid = ssa_surveyid(pid);
 
-    printf("\n***\nPLATE %s/%d/%d\n", refname, sid, pid);
-    make_reduction( pid );
+    printf("\n***\nPLATE %d/%d\n", sid, pid);
+    make_reduction( pid, gc, K, model, meq, refnames, minmags, maxmags );
   end
   
 end
