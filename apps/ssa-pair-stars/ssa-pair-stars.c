@@ -265,6 +265,8 @@ static void show_usage( FILE * output, int argc, char * argv[] )
   fprintf(output, "  du2={radian|deg}   DC unit\n");
   fprintf(output, "  cap1=<size_t>      set initial capacity of first star list\n");
   fprintf(output, "  cap2=<size_t>      set initial capacity of second star list\n");
+  fprintf(output, "  s1=suffix1         Suffix to add to all column names of first file\n");
+  fprintf(output, "  s2=suffix2         Suffix to add to all column names of second file\n");
   fprintf(output, "  dups={keep,drop}   What to do with multiple detections?\n");
   fprintf(output, "  -d                 Write coordinate differences in additional columns\n");
   fprintf(output, "  -i                 Invert match\n");
@@ -322,6 +324,10 @@ int main(int argc, char *argv[])
 
   size_t capacity[2] =
     { 15000000, 15000000 };
+
+  char suffix[2][64] =
+    { {0}, {0} };
+
 
   char head[2][MAX_HEADER_LENGTH];
 
@@ -420,6 +426,14 @@ int main(int argc, char *argv[])
         fprintf(stderr,"Invalid value of %s\n", argv[i]);
         return 1;
       }
+    }
+    else if ( strncmp(argv[i], "s1=", 3) == 0 )
+    {
+      strncpy(suffix[0], argv[i] + 3, sizeof(suffix[0]) - 1);
+    }
+    else if ( strncmp(argv[i], "s2=", 3) == 0 )
+    {
+      strncpy(suffix[1], argv[i] + 3, sizeof(suffix[1]) - 1);
     }
     else if ( strncmp(argv[i], "dups=", 5) == 0 )
     {
@@ -572,7 +586,31 @@ int main(int argc, char *argv[])
   }
 
   /* print header line */
-  printf("%s\t%s%s", head[0], head[1], append_diffs ? "\tdra\tddec\tdr\n" : "\n");
+  if ( 1 )
+  {
+    static const char delims[] = "\t";
+    char * p;
+
+    if ( (p = strtok(head[0], delims)) ) {
+      printf("%s%s", p, suffix[0]);
+      while ( (p = strtok(NULL, delims)) ) {
+        printf("\t%s%s", p, suffix[0]);
+      }
+    }
+
+    if ( (p = strtok(head[1], delims)) ) {
+      printf("\t%s%s", p, suffix[1]);
+      while ( (p = strtok(NULL, delims)) ) {
+        printf("\t%s%s", p, suffix[1]);
+      }
+    }
+
+    if ( append_diffs ) {
+      printf("\tdra\tddec\tdr");
+    }
+
+    printf("\n");
+  }
 
   size1 = ccarray_size(list[0]);
   size2 = ccarray_size(list[1]);
