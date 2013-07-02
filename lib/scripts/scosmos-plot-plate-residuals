@@ -13,6 +13,7 @@ dmax="+1.5"
 jpggen=0
 pdfgen=0
 force=0
+outname=""
 
 function show_usage()
 {
@@ -22,6 +23,7 @@ function show_usage()
     echo " -jpg          Turn on jpeg generation using GraphicsMagick";
     echo " -pdf          Turn on pdf generation using ps2pdf";
     echo " -f            Force replot even output file already exist";
+    echo " -o <outname>  Set base name for output file"
     echo " mmin={value}  magnitude range min";
     echo " mmax={value}  magnitude range max";
     echo " xmin={value}  X range min (mkm)";
@@ -33,24 +35,25 @@ function show_usage()
     echo " pt=\"string\" define point style";
 }
 
-    
+
 while [[ -n $1 ]];
 do
     case "$1" in
-     -help|--help) show_usage ; exit 1 ;;
-	    mmin=*) mmin="${1:5}" ;;
-	    mmax=*) mmax="${1:5}" ;;
-	    xmin=*) xmin="${1:5}" ;;
-	    xmax=*) xmax="${1:5}" ;;
-	    ymin=*) ymin="${1:5}" ;;
-	    ymax=*) ymax="${1:5}" ;;
-	    dmin=*) dmin="${1:5}" ;;
-	    dmax=*) dmax="${1:5}" ;;
-        pt=*) PT="${1:3}" ;;
-        -jpg) jpggen=1 ;;
-        -pdf) pdfgen=1 ;;
-          -f) force=1 ;;
-           *) FLIST="$FLIST $1" ;;
+        -help|--help) show_usage ; exit 1 ;;
+        mmin=*) mmin="${1:5}" ;;
+        mmax=*) mmax="${1:5}" ;;
+        xmin=*) xmin="${1:5}" ;;
+        xmax=*) xmax="${1:5}" ;;
+        ymin=*) ymin="${1:5}" ;;
+        ymax=*) ymax="${1:5}" ;;
+        dmin=*) dmin="${1:5}" ;;
+        dmax=*) dmax="${1:5}" ;;
+          pt=*) PT="${1:3}" ;;
+          -jpg) jpggen=1 ;;
+          -pdf) pdfgen=1 ;;
+            -f) force=1 ;;
+            -o) shift; outname="$1" ;;
+             *) FLIST="$FLIST $1" ;;
     esac
 
     shift
@@ -71,90 +74,101 @@ echo "dmin : $dmin"
 echo "dmax : $dmax"
 echo "pt   : $PT"
 echo "force: $force"
+echo "FLIST: $FLIST"
 
 {
 cat << EOF
 
- set term post landscape eps enhanced colour clip blacktext font "Arial,10"
+  set term post landscape enhanced colour clip blacktext font "Arial,10"
 
- do for [ datafile in "$FLIST" ] {
- 
-    fname = system(sprintf("basename %s", datafile))  
-    epsname = sprintf("%s.eps",fname);
+  if ( "$outname" eq "" ) {
+    outname = system("basename $FLIST .dat")
+  }
+  else {
+    outname = "$outname";
+  }
 
-    # check if output file already exists
-    if ( !$force && strlen(system(sprintf("file %s | fgrep 'ERROR:'", epsname))) == 0 ) {
-        print 'WARNING: ' . fname . ' exists. skip plot generation. Use -f option to force replot';
-    } 
-    else {
-      #############################################################
-      print fname;
-      
-      set output epsname
-      set title fname 
-      set grid xtics ytics lt 1 lc rgb 'gray' lw 0.25
-      set xtics font ',6'
-      set ytics font ',6'
+  epsname = sprintf("%s.eps",outname)
 
-      set xrange [$xmin:$xmax]
-      set yrange [$dmin:$dmax]
-      set xlabel 'x, mkm'
-      set ylabel 'dx, arcsec'
-      plot datafile u (column('x')):(column('dx')) w $PT not 
-    
-      
-      set xrange [$xmin:$xmax]
-      set yrange [$dmin:$dmax]
-      set xlabel 'x, mkm'
-      set ylabel 'dy, arcsec'
-      plot datafile u (column('x')):(column('dy')) w $PT not 
-    
-      
-      set xrange [$ymin:$ymax]
-      set yrange [$dmin:$dmax]
-      set xlabel 'y, mkm'
-      set ylabel 'dx, arcsec'
-      plot datafile u (column('x')):(column('dx')) w $PT not 
-        
+  # check if output file already exists
+  if ( !$force && strlen(system(sprintf("file %s | fgrep 'ERROR:'", epsname))) == 0 ) {
+    print 'WARNING: ' . epsname . ' exists. skip plot generation. Use -f option to force replot';
+  }
+  else {
+    #############################################################
 
-      set xrange [$ymin:$ymax]
-      set yrange [$dmin:$dmax]
-      set xlabel 'y, mkm'
-      set ylabel 'dy, arcsec'
-      plot datafile u (column('x')):(column('dy')) w $PT not 
-        
+    print 'Generating ' . epsname . ' ..';
 
-      set xrange [$mmin:$mmax]
-      set yrange [$dmin:$dmax]
-      set xlabel 'mag'
-      set ylabel 'dx, arcsec'
-      plot datafile u (column('mag')):(column('dx')) w $PT not 
+    set output epsname
+    set grid xtics ytics lt 1 lc rgb 'gray' lw 0.25
+    set xtics font ',6'
+    set ytics font ',6'
+
+    datafile = "<cat $FLIST"
+
+    set title 'dx(x)'
+    set xrange [$xmin:$xmax]
+    set yrange [$dmin:$dmax]
+    set xlabel 'x, mkm'
+    set ylabel 'dx, arcsec'
+    plot datafile u (column('x')):(column('dx')) w $PT not
 
 
-      set xrange [$mmin:$mmax]
-      set yrange [$dmin:$dmax]
-      set xlabel 'mag'
-      set ylabel 'dy, arcsec'
-      plot datafile u (column('mag')):(column('dy')) w $PT not 
-     
+    set title 'dy(x)'
+    set xrange [$xmin:$xmax]
+    set yrange [$dmin:$dmax]
+    set xlabel 'x, mkm'
+    set ylabel 'dy, arcsec'
+    plot datafile u (column('x')):(column('dy')) w $PT not
 
-      if ( $pdfgen ) {
-      	  print 'Convert to pdf...'
-          system(sprintf("ps2pdf %s %s.pdf", epsname, fname));
-      }
-     
-      if ( $jpggen ) {
-          print 'Convert to jpeg...'
-          system(sprintf("convert +adjoin -page A4+0+0 %s[0-5] -rotate 90 %s-%%02d.jpg", epsname, fname));
-          # -density 300x300
-      }
-      
-      #############################################################
+
+    set title 'dx(y)'
+    set xrange [$ymin:$ymax]
+    set yrange [$dmin:$dmax]
+    set xlabel 'y, mkm'
+    set ylabel 'dx, arcsec'
+    plot datafile u (column('x')):(column('dx')) w $PT not
+
+
+    set title 'dy(y)'
+    set xrange [$ymin:$ymax]
+    set yrange [$dmin:$dmax]
+    set xlabel 'y, mkm'
+    set ylabel 'dy, arcsec'
+    plot datafile u (column('x')):(column('dy')) w $PT not
+
+
+    set title 'dx(mag)'
+    set xrange [$mmin:$mmax]
+    set yrange [$dmin:$dmax]
+    set xlabel 'mag'
+    set ylabel 'dx, arcsec'
+    plot datafile u (column('mag')):(column('dx')) w $PT not
+
+
+    set title 'dy(mag)'
+    set xrange [$mmin:$mmax]
+    set yrange [$dmin:$dmax]
+    set xlabel 'mag'
+    set ylabel 'dy, arcsec'
+    plot datafile u (column('mag')):(column('dy')) w $PT not
+
+
+    if ( $pdfgen ) {
+      print 'Convert to pdf...'
+      system(sprintf("ps2pdf %s %s.pdf", epsname, outname));
     }
- }
-    
+
+    if ( $jpggen ) {
+      print 'Convert to jpeg...'
+      system(sprintf("convert +adjoin -page A4+0+0 %s -rotate 90 %s-%%02d.jpg", epsname, outname));
+      # -density 300x300
+    }
+
+    #############################################################
+  }
 
 EOF
 } | gnuplot
- 
+
 
