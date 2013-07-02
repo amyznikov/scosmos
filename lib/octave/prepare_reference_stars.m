@@ -51,7 +51,7 @@ function prepare_reference_stars( plateid, refnames )
       disp(cmd);
       syscall(cmd);
       stmp_ready = 1;
-    endif # stmp_ready
+    end # stmp_ready
 
     cmd = sprintf('psql wsdb -c \\\\"copy(%s) to stdout with csv header delimiter E''\\t'' null ''NA'' \\\\" > %s', selectCmd, rtmp);
     disp(cmd);
@@ -71,7 +71,7 @@ function prepare_reference_stars( plateid, refnames )
 
     disp(cmd);
     syscall(cmd);
-  endfor
+  end
 
 end
 
