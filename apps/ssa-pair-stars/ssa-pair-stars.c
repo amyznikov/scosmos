@@ -543,13 +543,6 @@ int main(int argc, char *argv[])
     }
   }
 
-  /* create output file */
-  if ( outname && ! (output = fopen(outname,"w")) ) {
-    fprintf(stderr, "Can't write %s: %s\n", outname, strerror(errno));
-    return 1;
-  }
-
-
   /* allocate memory storage */
   for ( i = 0; i < 2; ++i )
   {
@@ -590,6 +583,13 @@ int main(int argc, char *argv[])
   }
 
 
+  /* create output file */
+  if ( outname && ! (output = fopen(outname,"w")) ) {
+    fprintf(stderr, "Can't write %s: %s\n", outname, strerror(errno));
+    return 1;
+  }
+
+
   /* sort lists */
   for ( i = 0; i < 2; ++i )
   {
@@ -598,6 +598,7 @@ int main(int argc, char *argv[])
     }
     ccarray_sort(list[i], 0, ccarray_size(list[i]), cmpradec);
   }
+
 
 
   /* search pairs */
