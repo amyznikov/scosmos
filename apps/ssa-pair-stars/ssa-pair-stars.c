@@ -268,6 +268,7 @@ static void show_usage( FILE * output, int argc, char * argv[] )
   fprintf(output, "  s1=suffix1         Suffix to add to all column names of first file\n");
   fprintf(output, "  s2=suffix2         Suffix to add to all column names of second file\n");
   fprintf(output, "  dups={keep,drop}   What to do with multiple detections?\n");
+  fprintf(output, "  -o <out-file-name> Set output file name\n");
   fprintf(output, "  -d                 Write coordinate differences in additional columns\n");
   fprintf(output, "  -i                 Invert match\n");
   fprintf(output, "  -v                 Print some diagnostic messages to stderr (verbose mode)\n");
@@ -301,8 +302,12 @@ int main(int argc, char *argv[])
   const char * fname[2] =
     { NULL, NULL };
 
+  const char * outname = NULL;
+
   FILE * fp[2] =
     { NULL, NULL };
+
+  FILE * output = stdout;
 
   compression_t compression[2] =
     { compression_unknown, compression_unknown };
@@ -455,6 +460,15 @@ int main(int argc, char *argv[])
     {
       const char * opt = argv[i] + 1;
 
+      if ( strcmp(opt,"o") == 0 ) {
+        if ( ++i >= argc ) {
+          fprintf(stderr,"ERROR: missing output file name after -o switch\n");
+          return 1;
+        }
+        outname = argv[i];
+        continue;
+      }
+
       for ( ; *opt ; ++opt )
       {
         switch ( *opt ) {
@@ -473,7 +487,7 @@ int main(int argc, char *argv[])
     }
     else {
       fprintf(stderr, "Invalid argument '%s'. Note that only 2 input files are allowed\n", argv[i]);
-      return -1;
+      return 1;
     }
   }
 
@@ -484,7 +498,7 @@ int main(int argc, char *argv[])
   if ( !fname[0] || !fname[1] ) {
     fprintf(stderr,"Two input file names expected\n");
     show_usage(stderr, argc, argv);
-    return -1;
+    return 1;
   }
 
   if ( rc[0] < 1 ) {
@@ -496,25 +510,25 @@ int main(int argc, char *argv[])
   if ( rc[1] < 1 ) {
     fprintf(stderr,"rc2 argument is mandatory\n");
     show_usage(stderr, argc, argv);
-    return -1;
+    return 1;
   }
 
   if ( dc[0] < 1 ) {
     fprintf(stderr,"dc1 argument is mandatory\n");
     show_usage(stderr, argc, argv);
-    return -1;
+    return 1;
   }
 
   if ( dc[1] < 1 ) {
     fprintf(stderr,"dc2 argument is mandatory\n");
     show_usage(stderr, argc, argv);
-    return -1;
+    return 1;
   }
 
   if ( (r *= (PI / (180 * 3600))) <= 0 ) {
     fprintf(stderr,"r argument is mandatory\n");
     show_usage(stderr, argc, argv);
-    return -1;
+    return 1;
   }
 
 
@@ -525,8 +539,14 @@ int main(int argc, char *argv[])
   {
     if ( access(fname[i], R_OK) != 0 ) {
       fprintf(stderr, "Can't read %s: %s\n", fname[i], strerror(errno));
-      return -1;
+      return 1;
     }
+  }
+
+  /* create output file */
+  if ( outname && ! (output = fopen(outname,"w")) ) {
+    fprintf(stderr, "Can't write %s: %s\n", outname, strerror(errno));
+    return 1;
   }
 
 
@@ -535,7 +555,7 @@ int main(int argc, char *argv[])
   {
     if ( !(list[i] = ccarray_create(capacity[i], sizeof(obj_t))) ) {
       fprintf(stderr, "ccarray_create(capacity=%zu) fails: %s\n", capacity[i], strerror(errno));
-      return -1;
+      return 1;
     }
   }
 
@@ -549,12 +569,12 @@ int main(int argc, char *argv[])
 
     if ( !(fp[i] = open_file(fname[i], &compression[i])) ) {
       fprintf(stderr, "Can't read '%s': %s\n", fname[i], strerror(errno));
-      return -1;
+      return 1;
     }
 
     if ( load_objects(fp[i], rc[i], dc[i], ru[i], du[i], head[i], list[i]) != 0 ) {
       fprintf(stderr, "Can't load %s\n", fname[i]);
-      return -1;
+      return 1;
     }
     close_file( fp[i], compression[i] );
 
@@ -565,7 +585,7 @@ int main(int argc, char *argv[])
     if ( ccarray_size(list[i]) == capacity[i] && !feof(fp[i]) ) {
       fprintf(stderr, "load_objects() fails for %s: Too many objects. Try increase capacity (currently %zu)\n",
           fname[i], capacity[i]);
-      return -1;
+      return 1;
     }
   }
 
@@ -592,24 +612,24 @@ int main(int argc, char *argv[])
     char * p;
 
     if ( (p = strtok(head[0], delims)) ) {
-      printf("%s%s", p, suffix[0]);
+      fprintf(output, "%s%s", p, suffix[0]);
       while ( (p = strtok(NULL, delims)) ) {
-        printf("\t%s%s", p, suffix[0]);
+        fprintf(output, "\t%s%s", p, suffix[0]);
       }
     }
 
     if ( (p = strtok(head[1], delims)) ) {
-      printf("\t%s%s", p, suffix[1]);
+      fprintf(output, "\t%s%s", p, suffix[1]);
       while ( (p = strtok(NULL, delims)) ) {
-        printf("\t%s%s", p, suffix[1]);
+        fprintf(output, "\t%s%s", p, suffix[1]);
       }
     }
 
     if ( append_diffs ) {
-      printf("\tdra\tddec\tdr");
+      fprintf(output, "\tdra\tddec\tdr");
     }
 
-    printf("\n");
+    fprintf(output, "\n");
   }
 
   size1 = ccarray_size(list[0]);
@@ -652,7 +672,7 @@ int main(int argc, char *argv[])
 
     if ( numpairs < 1 ) {
       if ( invert_match ) {
-        printf("%s\n", obj1->line);
+        fprintf(output, "%s\n", obj1->line);
       }
     }
     else
@@ -662,13 +682,13 @@ int main(int argc, char *argv[])
       case dups_drop:
         if ( numpairs == 1 )
         {
-          printf("%s\t%s", obj1->line, pairs[0]->line);
+          fprintf(output, "%s\t%s", obj1->line, pairs[0]->line);
 
           if ( !append_diffs ) {
-            printf("\n");
+            fprintf(output, "\n");
           }
           else {
-            printf("\t%+9.3f\t%+9.3f\t%+9.3f\n", dra[0] * 180 * 3600 / PI, ddec[0] * 180 * 3600 / PI,
+            fprintf(output, "\t%+9.3f\t%+9.3f\t%+9.3f\n", dra[0] * 180 * 3600 / PI, ddec[0] * 180 * 3600 / PI,
                 dr[0] * 180 * 3600 / PI);
           }
         }
@@ -677,13 +697,13 @@ int main(int argc, char *argv[])
       case dups_keep:
         for ( pos2 = 0; pos2 < numpairs; ++pos2 )
         {
-          printf("%s\t%s", obj1->line, pairs[pos2]->line);
+          fprintf(output, "%s\t%s", obj1->line, pairs[pos2]->line);
 
           if ( !append_diffs ) {
-            printf("\n");
+            fprintf(output, "\n");
           }
           else {
-            printf("%+9.3f\t%+9.3f\t%+9.3f\n", dra[pos2] * 180 * 3600 / PI, ddec[pos2] * 180 * 3600 / PI,
+            fprintf(output, "%+9.3f\t%+9.3f\t%+9.3f\n", dra[pos2] * 180 * 3600 / PI, ddec[pos2] * 180 * 3600 / PI,
                 dr[pos2] * 180 * 3600 / PI);
           }
         }
