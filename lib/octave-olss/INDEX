@@ -1,0 +1,7 @@
+OLSS >> Octave version of my streamed linear solver
+Octave version of my streamed linear solver
+olss_create
+olss_destroy
+olss_tuple
+olss_ctuple
+olss_solve

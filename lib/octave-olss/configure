@@ -1,0 +1,6 @@
+#! /bin/bash -f
+
+if [ -e src/configure ]; then
+  cd src && ./configure $*
+fi
+

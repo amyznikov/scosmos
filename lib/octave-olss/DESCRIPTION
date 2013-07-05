@@ -1,0 +1,11 @@
+Name: octave-olss
+Version: 0.0.1
+Date: 2013-07-04
+Author: Andrey Myznikov
+Maintainer: Andrey Myznikov
+Title: Octave version of my streamed linear solver
+Description: Octave version of my streamed linear solver
+Depends: octave (>= 3.0.0)
+Autoload: yes
+License: GPLv3+
+Url: http://octave.sf.net

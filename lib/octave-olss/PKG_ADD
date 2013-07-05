@@ -1,0 +1,5 @@
+autoload ("olss_create", fullfile (fileparts (mfilename ("fullpath")), "octave-olss.oct"));
+autoload ("olss_destroy", fullfile (fileparts (mfilename ("fullpath")), "octave-olss.oct"));
+autoload ("olss_tuple", fullfile (fileparts (mfilename ("fullpath")), "octave-olss.oct"));
+autoload ("olss_ctuple", fullfile (fileparts (mfilename ("fullpath")), "octave-olss.oct"));
+autoload ("olss_solve", fullfile (fileparts (mfilename ("fullpath")), "octave-olss.oct"));
