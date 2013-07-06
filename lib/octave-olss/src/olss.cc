@@ -114,47 +114,31 @@ static inline int olss_solve(ogmctx_t * ctx, double x[/*np*/], double e[/*np*/],
  *
  **********************************************************************************************************************/
 DEFUN_DLD( olss_create, args, nargout,
-"-*- texinfo -*-\n\
-@deftypefn {Function} {@var{sid}} = olss_create(@var{NP})\n\
-\n\
-Create stream-oriented linear least squares solver.\n\
-\n\
-\n\
-Usage:\n\n\
-  NP = 2\n\
-  sid = olss_create(NP); \n\
-\n\
-  % Add row-wise ( fortran style) tuples: \n\
-  M = [ 1 2; 1 3; 1 4; 1 5] \n\
-  R = [ 2; 4; 6; 8; 10] \n\
-  olss_tuple(sid,M,R); \n\
-\n\
-  % Add column-wise (C style) tuples (may be faster for large data blocks loaded from files): \n\
-  M = [ 1 1 1 1 1 ; 6 7 8 9 10] \n\
-  R = [ 12 14 16 18 20 ] \n\
-  olss_ctuple(sid,M,R); \n\
-\n\
-  % Solve equations: \n\
-  [X,EX,S,C,CI] = olss_solve(s) \n\
-  X =  \n\
-     0 \n\
-     2 \n\
-  EX = \n\
-     0 \n\
-     0 \n\
-  S = 0 \n\
-  C = \n\
-     5   20 \n\
-    20   90 \n\
-  CI = \n\
-     1.80000  -0.40000 \n\
-    -0.40000   0.10000 \n\
-   \n\
-  % Destroy solver: \n\
-  olss_destroy(sid);\n\
-\n\
-\n\
-@seealso{ olss_destroy(), olss_solve(), olss_tuple(), olss_ctuple() }\n\n\
+"-*- texinfo -*-\n"
+"@deftypefn {Function} {@var{sid}} = olss_create(@var{NP})\n"
+"\n"
+"Create stream-oriented linear least squares solver.\n\n"
+"\n"
+"Usage:\n"
+"\n"
+"NP = 2\n\n"
+"sid = olss_create(NP);\n\n"
+"% Add row-wise (fortran style) tuples: \n\n"
+"M = [ 1 2; 1 3; 1 4; 1 5]\n\n"
+"R = [ 2; 4; 6; 8; 10]\n\n"
+"olss_tuple(sid,M,R); \n"
+"\n"
+"% Add column-wise (C style) tuples (may be faster for large data blocks loaded from files): \n\n"
+"M = [ 1 1 1 1 1 ; 6 7 8 9 10] \n\n"
+"R = [ 12 14 16 18 20 ]\n\n"
+"olss_ctuple(sid,M,R);\n"
+"\n"
+"% Solve equations: \n\n"
+"[X,EX,S,C,CI] = olss_solve(sid)\n\n"
+"% Destroy solver: \n\n"
+"olss_destroy(sid);\n\n"
+""
+"@seealso{ olss_destroy(), olss_solve(), olss_tuple(), olss_ctuple() }\n\n\
    Copyright (c) 2013, Andrey Myznikov <andrey.myznikov@@gmail.com>\n\
 @end deftypefn\n"
 )
