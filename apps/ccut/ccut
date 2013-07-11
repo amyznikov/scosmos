@@ -5,7 +5,7 @@ files=""
 cond=""
 
 while [ -n "$1" ] ; do
-    arg=$1   
+    arg=$1
     case $arg in
      -f) shift; [ -z "$cols" ] && cols="$1" || cols="$cols\\t$1" ; cols=${cols//,/\\t} ;;
      -c) shift; if [[ $cond != "" ]]; then echo "error: multiple -c switch not allowed." 1>&2; exit 1; else cond="$1"; fi ;;
@@ -15,71 +15,83 @@ while [ -n "$1" ] ; do
 done
 
 start='
-   BEGIN {
-     # get output column names requested in command line
-     n = split(cols,col);
-     for ( i = 1; i <= n; ++i) {
-       ocn[i] = col[i];
-     }
-   }  
-   NR == 1 {
-   	 # get column names from file header
-     for ( f = 1; f <= NF; ++f ) {
-       ocff[$f] = f;
-     } 
-   	
-     # match requested column indexes with file header column indexes
-     for ( i = 1; i <= n; ++i )
-     {
-       for ( f = 1; f <= NF; ++f )
-       if ( $f == ocn[i] ) {
-         ocf[i] = f;
-         break;
-       }
-       if ( f > NF ) {
-         print "Column " ocn[i] " not found in file header" > "/dev/stderr"
-         exit 1;
-       }
-     }
-      
-     # print output header
-     for ( i = 1; i < n; ++i ) {
-       printf("%s\t", $ocf[i]);
-     }
-     printf("%s\n", $ocf[n]);
-     next
-   }
+  BEGIN {
+    # get output column names requested in command line
+    n = split(cols,col);
+    for ( i = 1; i <= n; ++i) {
+      ocn[i] = col[i];
+    }
+  }
+  NR == 1 {
+    # get column names from file header
+    for ( f = 1; f <= NF; ++f ) {
+      ocff[$f] = f;
+    }
+
+    if ( n == 0 ) {
+      print $0;
+    }
+    else {
+      # match requested column indexes with file header column indexes
+      for ( i = 1; i <= n; ++i )
+      {
+        for ( f = 1; f <= NF; ++f )
+        if ( $f == ocn[i] ) {
+          ocf[i] = f;
+          break;
+        }
+        if ( f > NF ) {
+          print "Column " ocn[i] " not found in file header" > "/dev/stderr"
+          exit 1;
+        }
+      }
+
+      # print output header
+      for ( i = 1; i < n; ++i ) {
+        printf("%s\t", $ocf[i]);
+      }
+      printf("%s\n", $ocf[n]);
+    }
+    next
+  }
 '
 
 
 if [[ -z "$cond" ]] ; then
 end='
-    {
-     for ( i = 1; i < n; ++i ) {
-       printf("%s\t", $ocf[i]);
-     }
-     printf("%s\n", $ocf[n]);
-   }  
+  {
+    if ( n == 0 ) {
+      print $0;
+    }
+    else {
+      for ( i = 1; i < n; ++i ) {
+        printf("%s\t", $ocf[i]);
+      }
+      printf("%s\n", $ocf[n]);
+    }
+  }
 '
 else
 
 cond=$(echo "$cond" | sed -r 's/([a-zA-Z_]\w*)/$ocff[\"\1\"]/g')
 
 end="
-   { 
-     if ( $cond )
-     {
-	   for ( i = 1; i < n; ++i ) {
-	     printf(\"%s\t\", \$ocf[i]);
-	   }
-	   printf(\"%s\n\", \$ocf[n]);
-     }
-   }  
+  {
+    if ( ${cond} )
+    {
+      if ( n == 0 ) {
+        print \$0;
+      }
+      else {
+        for ( i = 1; i < n; ++i ) {
+          printf(\"%s\t\", \$ocf[i]);
+        }
+        printf(\"%s\n\", \$ocf[n]);
+      }
+    }
+  }
 "
 fi
 
 script="${start}${end}"
-#echo "script:"
-#echo "$script"
-
-awk -v cols="$cols" "$script" $files 
+awk -v cols="$cols" "$script" $files
