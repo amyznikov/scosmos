@@ -7,7 +7,8 @@ subdirs = ssa-detection-dump \
           ssa-plate-dump \
           ssa-plate-stats \
           radec2xms \
-          ssa-pair-stars
+          ssa-pair-stars \
+          ccut
 
 all:
 	for f in $(subdirs) ; do $(MAKE) -C $$f $@ || exit 1; done

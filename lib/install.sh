@@ -41,16 +41,14 @@ cp octave/* $libdir/octave/                || exit 1
 cp postgres/* $libdir/postgres/            || exit 1
 cp scripts/* $libdir/scripts/              || exit 1
 
-if (( ${olss} )) ; 
-then 
 
+if (( ${olss} )) ; then 
 echo ""
 echo "Installing octave-olss..."
 echo ""
-make -C octave-olss/src clean && tar cfz octave-olss.tar.gz octave-olss/ || exit 1
 
-{
-cat << EOF
+make -C octave-olss/src clean && tar cfz octave-olss.tar.gz octave-olss/ || exit 1
+{ cat << EOF
     pkg uninstall -verbose octave-olss
     pkg install -verbose octave-olss.tar.gz
 EOF
