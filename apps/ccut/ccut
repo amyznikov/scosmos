@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 cols=""
 files=""
@@ -79,7 +79,7 @@ end="
 fi
 
 script="${start}${end}"
-echo "script:"
-echo "$script"
+#echo "script:"
+#echo "$script"
 
 awk -v cols="$cols" "$script" $files 
