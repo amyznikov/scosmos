@@ -1,0 +1,50 @@
+#!/bin/sh
+
+cols=""
+files=""
+
+while [ -n "$1" ] ; do
+    arg=$1   
+    case $arg in
+     -f) shift; [ -z "$cols" ] && cols="$1" || cols="$cols\\t$1" ; cols=${cols//,/\\t} ;;
+      *) files="$files $arg" ;;  
+    esac;
+    shift;
+done
+
+awk -v cols="$cols" '
+   BEGIN {
+     n = split(cols,col);
+     for ( i = 1; i <= n; ++i) {
+       ocn[i] = col[i];
+      } 
+   }  
+   NR == 1 {
+      for ( i = 1; i <= n; ++i )
+      {
+      	for ( f = 1; f <= NF; ++f )
+      	if ( $f == ocn[i] ) {
+          ocf[i] = f;
+          break;
+      	}
+      	
+      	if ( f > NF ) {
+          print "Colum " ocn[i] " not found in file header" > "/dev/stderr"
+          exit 1;
+      	}
+      }
+      
+     for ( i = 1; i < n; ++i ) {
+       printf("%s\t", $ocf[i]);
+     }
+     printf("%s\n", $ocf[n]);
+      
+     next
+   }
+   {
+     for ( i = 1; i < n; ++i ) {
+       printf("%s\t", $ocf[i]);
+     }
+     printf("%s\n", $ocf[n]);
+   }  
+' $files
