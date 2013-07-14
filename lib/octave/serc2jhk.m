@@ -12,5 +12,17 @@
 %
 
 function MM = serc2jhk( M1, M2, M3, S1, S2, S3 )
-  MM = [ ones(size(M1)) M1 M2 M3 S1 S2 S3 ];
+
+  S1 *= 1e-7;
+  S2 *= 1e-7;
+  S3 *= 1e-7;
+
+  MM = [ ones(size(M1))   \
+	 M1 M2 M3         \
+         S1 S1.^2 S1.^3   \
+         S2 S2.^2 S2.^3   \
+         S3 S3.^2 S3.^3   \
+         ];
 end
+
+
