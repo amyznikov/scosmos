@@ -103,7 +103,7 @@ function calibrate_jhk2smag( plateid, outputname, noprep )
   pclose(fid);
 
   # remove temp files
-  syscal("rm -f %s %s %s", sname, pscname, spscname);
+  syscall("rm -f %s %s %s", sname, pscname, spscname);
 
   # remove stars with poor sky background
   smin = min( v(:,1) ) + 1e6;
