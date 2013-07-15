@@ -35,11 +35,12 @@ while [ -n "$1" ] ; do
     shift;
 done
 
-
+echo "Copy files into $libdir..." 
 mkdir -p $libdir/{octave,postgres,scripts} || exit 1
 cp octave/* $libdir/octave/                || exit 1
 cp postgres/* $libdir/postgres/            || exit 1
 cp scripts/* $libdir/scripts/              || exit 1
+echo "OK" 
 
 
 if (( ${olss} )) ; then 
