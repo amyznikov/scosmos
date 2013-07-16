@@ -1,0 +1,244 @@
+#! /usr/bin/octave -qf
+
+format short;
+ignore_function_time_stamp("all");
+if ( exist(__sub=sprintf("%s/octave",pwd()),'dir' ) )
+  addpath(__sub);
+endif
+
+arg_list = argv ();
+
+
+#######################################################################
+
+function show_usage( stream )
+  fprintf (stream, "Usage:\n");
+  fprintf (stream, "  %s -o <output-file-name> plateid ...\n", program_name ());
+end
+
+
+
+#######################################################################
+#
+# Linear (rough) calibration JHK -> sMag
+#
+
+function calibrate_jhk2smag( plateid, outputname, noprep )
+  R = 2.5;
+
+  # get process id to format temporary file names
+  pid = getpid ();
+  printf("pid=%d\n", pid);
+
+  sname = sprintf("/tmp/scosmos.%d.%d.tmp", plateid, pid );
+  spscname = sprintf("/tmp/scosmos.psc.%d.%d.tmp", plateid, pid);
+
+  if ( noprep )
+    pscname = "psc.dat";
+  else
+    pscname = sprintf("/tmp/psc.%d.%d.tmp", plateid, pid);
+  end
+
+  # check if this field is already processed
+  if ( exist(outputname,"file") )
+    s = system(sprintf("egrep -q '^\\s*%d\t' %s", plateid, outputname));
+    if ( s == 0 )
+      printf("\nSKIP %d BECAUSE ALREADY PROCESSES\n\n", plateid);
+      return;
+    end
+  end
+
+
+  # get scosmos data
+  fprintf(stderr,"get scosmos data\n");
+  cmd = get_plate_pipe_command( plateid, "-hcf" );
+  if ( !strcmp(cmd,"") )
+    syscall("%s | ccut -f ra,dec,isky,sMag -c 'sMag>9 && sMag<16.3' > %s", cmd, sname);
+  else
+    fprintf(stderr,"ERROR: can not find scosmos plate location for plateid=%d\n",plateid); return;
+  end
+
+
+  # get psc data
+  if ( noprep )
+    A0 = 0;
+    D0 = 0;
+  else
+    printf("get psc data\n");
+
+    v = sscanf(pgquery("select distinct rapnt, decpnt from ssa_plates where plateid=%d", plateid),"%lf");
+    if ( size(v,1) != 2 )
+      error("can not get field center for plateid=%d\n",plateid);
+    end
+
+    A0 = v(1);
+    D0 = v(2);
+    printf("A0:  %g\n",A0);
+    printf("D0: %+g\n",D0);
+
+    syscall("psql wsdb -c  \
+      \\\"copy( select ra, dec,j_m, h_m, k_m from psc  \
+          where spoint(ra,dec) @ scircle(spoint(%.9f*pi()/180,%+.9f*pi()/180),6*pi()/180)     \
+           and j_msigcom < 0.3 and h_msigcom < 0.35 and k_msigcom < 0.35    \
+           and j_m between 8.5 and 14.2                                     \
+           and h_m between 8 and 14                                         \
+           and k_m between 8 and 14                                         \
+           and j_m - k_m between 0.22 and 0.75                              \
+        ) to stdout with csv header delimiter E'\\t'\\\" > %s",
+         A0, D0, pscname);
+  end
+
+  # join plates
+  printf("join plates\n");
+  syscall("ssa-pair-stars rc1=1 dc1=2 rc2=1 dc2=2 r=%g dups=drop -v %s %s -o %s", R, sname, pscname, spscname );
+
+  # load reference stars
+  printf("load reference stars\n");
+  fid = popenq(spscname, "isky sMag j_m h_m k_m" );
+  if ( fid == -1 )
+    error("ERROR: can not read %s\n", fname);
+  end
+
+  v = transpose(fscanf(fid, "%lf", [5, Inf]));
+  pclose(fid);
+
+  # remove temp files
+  syscall("rm -f %s %s %s", sname, pscname, spscname);
+
+  # remove stars with poor sky background
+  smin = min( v(:,1) ) + 1e6;
+  smax = max( v(:,1) ) - 1e6;
+  good = v(:,1) >= smin & v(:,1) <= smax;
+  if ( ~all(good) )
+    v = v (good,:);
+  end
+
+  # extract columns
+  sMag = v(:,2);
+  j_m  = v(:,3);
+  h_m  = v(:,4);
+  k_m  = v(:,5);
+  MM = [ ones(size(sMag)) j_m h_m k_m ];
+
+
+  # solve linear model
+  printf("solve model\n");
+
+  NPASS = 15;
+  K = 6;
+  for pass = 1:NPASS
+
+    [C, sigma,~,E] = LinearRegression(MM,sMag);
+    sigma = sqrt(sigma);
+
+    printf("%d sigma=%g K=%g rows=%d\n", pass, sigma, K, rows(MM));
+
+    csmag = MM * C;
+    dsmag = sMag - csmag;
+
+    if ( pass < NPASS )
+
+      while ( all(good = abs(dsmag) < K * sigma) && K > 3 )
+        --K;
+      end
+
+      if ( all(good) )
+        break;
+      end
+
+      MM   = MM(good,:);
+      sMag = sMag(good);
+      j_m  = j_m(good);
+      h_m  = h_m(good);
+      k_m  = k_m(good);
+    end
+
+  endfor
+
+  if ( exist(outputname,"file") )
+    fid = fopen(outputname,"a");
+  else
+    fid = fopen(outputname,"w");
+    fprintf(fid,"plateid\tA0\tD0\tC0\tC1\tC2\tC3\tsigma\tE0\tE1\tE2\tE3\n");
+  endif
+
+  E = sqrt(E);
+  fprintf(fid,"%8d\t%9.3f\t+%9.3f\t%+15.9E\t%+15.9E\t%+15.9E\t%+15.9E\t%9.3f\t%9.3E\t%9.3E\t%9.3E\t%9.3E\n",
+     plateid, A0, D0, C(1), C(2), C(3), C(4), sigma, E(1), E(2), E(3), E(4) );
+  fclose(fid);
+
+
+  dirname = "cjhk2smag";
+  syscall("mkdir -p %s", dirname);
+  fname = sprintf("%s/%d.res", dirname, plateid);
+  if ( (fid = fopen(fname,"w")) == -1 )
+    fprintf(stderr,"ERROR: can not write %s\n", fname); return;
+  end
+
+  fprintf(fid,"j_m\th_m\tk_m\tsMag\tcsmag\tdsmag\n");
+  fprintf(fid,"%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n",
+    transpose([j_m h_m k_m sMag csmag dsmag]));
+  fclose(fid);
+  printf("%s saved\n", fname);
+
+end
+
+
+
+
+#######################################################################
+
+
+
+plateid = [];
+outname = "";
+stage = "stage1";
+noprep = 0;
+
+i = 0;
+while ( ++i <= nargin )
+
+  if ( strcmp(arg_list{i},"stage1") )
+    stage = "stage1";
+  elseif( strcmp(arg_list{i},"stage2") )
+    stage = "stage2";
+  elseif( strcmp(arg_list{i},"-o") )
+    if ( i < nargin )
+      outname = arg_list{++i};
+    else
+      show_usage( stderr );
+      return;
+    endif
+  elseif( strcmp(arg_list{i},"-noprep") )
+    noprep = 1
+  else
+    [x, ok] = str2num(arg_list{i});
+    if ( !ok )
+      fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+      show_usage( stderr );
+      return;
+    end
+  plateid = [ plateid x ];
+  end
+end
+
+
+if ( size(plateid,2) < 1 || strcmp(outname,"") )
+  show_usage( stderr );
+  return;
+end
+
+if ( strcmp(stage,"stage1" ) )
+
+  pkg load optim;
+
+  for i = 1:size(plateid,2)
+    pid = plateid(i);
+    printf("\nPLATE %d\n", pid);
+    calibrate_jhk2smag( pid, outname, noprep );
+  end
+
+
+end
+
+#######################################################################

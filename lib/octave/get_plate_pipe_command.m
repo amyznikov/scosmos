@@ -8,6 +8,9 @@ function cmd = get_plate_pipe_command( plateid, opts )
   end
 
   path = ssa_data_location( plateid );
+  if ( strcmp(path,"") )
+    error("ssa_data_location() fails");
+  end
 
   fname = sprintf('%s/%d.clean.dat', path, plateid);
   if ( exist(fname,'file') )
