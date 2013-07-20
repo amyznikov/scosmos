@@ -13,9 +13,70 @@ arg_list = argv ();
 
 function show_usage( stream )
   fprintf (stream, "Usage:\n");
-  fprintf (stream, "  %s -o <output-file-name> plateid ...\n", program_name ());
+  fprintf (stream, "  %s {stage1|stage2|stage3} [OPTIONS] [ARGS]\n", program_name ());
+  fprintf (stream, "stage1 arguments:\n");
+  fprintf (stream, "  -o <calibration-output-file-name> plateid ...\n");
+  fprintf (stream, "stage2 arguments:\n");
+  fprintf (stream, "  calibration-file-name\n");
+  fprintf (stream, "stage3 arguments:\n");
+  fprintf (stream, "  -c {SERCJ|SERCR|SERCI|ESOR} plateid ... \n");
 end
 
+
+
+#######################################################################
+# inner join for scosmos and psc
+
+function status = mkspsc(plateid, sname, pscname, spscname, noprep, ej, eh, ek, jmin, jmax, hmin, hmax, kmin, kmax, sMagMin, sMagMax )
+
+  status = 0;
+
+  R = 2.5;
+
+  # get scosmos data
+  fprintf(stderr,"get scosmos data\n");
+  cmd = get_plate_pipe_command( plateid, "-hcf" );
+  if ( !strcmp(cmd,"") )
+    syscall("%s | ccut -f ra,dec,isky,sMag,class -c 'sMag>%g && sMag<%g' > %s", cmd, sMagMin, sMagMax, sname );
+  else
+    fprintf(stderr,"ERROR: can not find scosmos plate location for plateid=%d\n",plateid);
+    return;
+  end
+
+  # get psc data
+  if ( noprep )
+    A0 = 0;
+    D0 = 0;
+  else
+    printf("get psc data\n");
+
+    v = sscanf(pgquery("select distinct rapnt, decpnt from ssa_plates where plateid=%d", plateid),"%lf");
+    if ( size(v,1) != 2 )
+      error("can not get field center for plateid=%d\n",plateid);
+    end
+
+    A0 = v(1);
+    D0 = v(2);
+    printf("A0:  %g\n",A0);
+    printf("D0: %+g\n",D0);
+
+    syscall("psql wsdb -c  \
+      \\\"copy( select ra, dec,j_m, h_m, k_m from psc  \
+          where spoint(ra,dec) @ scircle(spoint(%.9f*pi()/180,%+.9f*pi()/180),6*pi()/180)     \
+           and j_msigcom < %g and h_msigcom < %g and k_msigcom < %g         \
+           and j_m between %g and %g                                        \
+           and h_m between %g and %g                                        \
+           and k_m between %g and %g                                        \
+           and j_m - k_m between 0.22 and 0.75                              \
+        ) to stdout with csv header delimiter E'\\t'\\\" > %s",
+         A0, D0, ej, eh, ek, jmin, jmax, hmin, hmax, kmin, kmax, pscname );
+  end
+
+  # join plates
+  printf("join plates\n");
+  syscall("ssa-pair-stars rc1=1 dc1=2 rc2=1 dc2=2 r=%g dups=drop -v %s %s -o %s", R, sname, pscname, spscname );
+  status = 1;
+end
 
 
 #######################################################################
@@ -23,8 +84,7 @@ end
 # Linear (rough) calibration JHK -> sMag
 #
 
-function calibrate_jhk2smag( plateid, outputname, noprep )
-  R = 2.5;
+function calibrate_stage1( plateid, outputname, noprep )
 
   # get process id to format temporary file names
   pid = getpid ();
@@ -48,49 +108,11 @@ function calibrate_jhk2smag( plateid, outputname, noprep )
     end
   end
 
-
-  # get scosmos data
-  fprintf(stderr,"get scosmos data\n");
-  cmd = get_plate_pipe_command( plateid, "-hcf" );
-  if ( !strcmp(cmd,"") )
-    syscall("%s | ccut -f ra,dec,isky,sMag -c 'sMag>9 && sMag<16.3' > %s", cmd, sname);
-  else
-    fprintf(stderr,"ERROR: can not find scosmos plate location for plateid=%d\n",plateid); return;
+  if ( !mkspsc(plateid, sname, pscname, spscname, noprep,0.30,0.35,0.35,8.5,14.2,8,14,8,14,9,16.3 ) )
+    printf("\nSKIP %d BECAUSE mkspsc() FAILS\n\n", plateid);
+    return;
   end
 
-
-  # get psc data
-  if ( noprep )
-    A0 = 0;
-    D0 = 0;
-  else
-    printf("get psc data\n");
-
-    v = sscanf(pgquery("select distinct rapnt, decpnt from ssa_plates where plateid=%d", plateid),"%lf");
-    if ( size(v,1) != 2 )
-      error("can not get field center for plateid=%d\n",plateid);
-    end
-
-    A0 = v(1);
-    D0 = v(2);
-    printf("A0:  %g\n",A0);
-    printf("D0: %+g\n",D0);
-
-    syscall("psql wsdb -c  \
-      \\\"copy( select ra, dec,j_m, h_m, k_m from psc  \
-          where spoint(ra,dec) @ scircle(spoint(%.9f*pi()/180,%+.9f*pi()/180),6*pi()/180)     \
-           and j_msigcom < 0.3 and h_msigcom < 0.35 and k_msigcom < 0.35    \
-           and j_m between 8.5 and 14.2                                     \
-           and h_m between 8 and 14                                         \
-           and k_m between 8 and 14                                         \
-           and j_m - k_m between 0.22 and 0.75                              \
-        ) to stdout with csv header delimiter E'\\t'\\\" > %s",
-         A0, D0, pscname);
-  end
-
-  # join plates
-  printf("join plates\n");
-  syscall("ssa-pair-stars rc1=1 dc1=2 rc2=1 dc2=2 r=%g dups=drop -v %s %s -o %s", R, sname, pscname, spscname );
 
   # load reference stars
   printf("load reference stars\n");
@@ -103,7 +125,11 @@ function calibrate_jhk2smag( plateid, outputname, noprep )
   pclose(fid);
 
   # remove temp files
-  syscall("rm -f %s %s %s", sname, pscname, spscname);
+  if ( noprep )
+    syscall("rm -f %s %s", sname, spscname);
+  else
+    syscall("rm -f %s %s %s", sname, pscname, spscname);
+  end
 
   # remove stars with poor sky background
   smin = min( v(:,1) ) + 1e6;
@@ -163,7 +189,7 @@ function calibrate_jhk2smag( plateid, outputname, noprep )
   endif
 
   E = sqrt(E);
-  fprintf(fid,"%8d\t%9.3f\t+%9.3f\t%+15.9E\t%+15.9E\t%+15.9E\t%+15.9E\t%9.3f\t%9.3E\t%9.3E\t%9.3E\t%9.3E\n",
+  fprintf(fid,"%8d\t%9.3f\t%+9.3f\t%+15.9E\t%+15.9E\t%+15.9E\t%+15.9E\t%9.3f\t%9.3E\t%9.3E\t%9.3E\t%9.3E\n",
      plateid, A0, D0, C(1), C(2), C(3), C(4), sigma, E(1), E(2), E(3), E(4) );
   fclose(fid);
 
@@ -185,60 +211,351 @@ end
 
 
 
+#######################################################################
+# Select average of JHK->sMag calibration for all survey plates, 
+# dropping too large residuals
+
+function calibrate_stage2(calibname)
+
+  fid = popenq(calibname,"C0 C1 C2 C3");
+  if ( fid == -1 )
+    error("Can not read %s", calibname);
+  end
+
+  v = fscanf(fid,"%lf", [4, Inf]);
+  pclose( fid );
+
+  if ( size(v,1) != 4 )
+    error("Invalid data in %s", calibname);
+  end
+
+  if ( size(v,2) < 3 )
+    error("Not enough data in %s (%d)", calibname, cols(v));
+  end
+
+  NPASS = 25;
+  K = 3;
+  for  pass = 1:NPASS
+
+    for ( i=1:4 )
+      C(i) = mean(v(i,:));
+      E(i) = std(v(i,:));
+      # printf("* %d C%d=%+9.6E E%d=%+9.6E\n", pass, i-1, C(i), i-1, E(i) );
+    end
+
+    if ( pass < NPASS )
+      if ( all(all(good = abs(v(1,:)-C(1)) < K * E(1) & abs(v(2,:)-C(2)) < K * E(2) & abs(v(3,:)-C(3)) < K * E(3) & abs(v(4,:)-C(4)) < K * E(4))) )
+        break;
+      end
+      v = v(:,good);
+    end
+  end
+
+	printf("FINAL SOLUTION:\n");
+	printf("C = [%+9.6E\t%+9.6E\t%+9.6E\t%+9.6E]\n", C(1), C(2), C(3), C(4) );
+	printf("E = [%+9.6E\t%+9.6E\t%+9.6E\t%+9.6E]\n", E(1), E(2), E(3), E(4) );
+	printf("sMag(J,H,K) = %9.6E%+9.6E*J%+9.6E*H%+9.6E*K\n", C(1), C(2), C(3), C(4) );
+
+end
+
+#######################################################################
+# stage3 - non-linear spline approximation + extrapolation sMag->smag
+
+function C = getjhk2smagcalib( color )
+	switch ( color )
+		case "SERCJ"
+		  C = [ -1.550792E-01 +4.695458E+00 -1.681784E+00 -1.973197E+00 ];
+		otherwise
+		  error("No calibration data for %s. Use stage2 to generate and insert it into this code.", color);
+	end
+end
+
+function smag = jhk2smag( C, J, H, K )
+  smag = C(1) + C(2) * J + C(3) * H + C(4) * K;
+end
+
+
+global sMagBreaks; # sMag spline breaks
+global smagExtraValue;
+
+# mapping (sMag,isky)->smag 
+function smag = smap(S, PP, sMag, isky)
+  smag = ppval(PP,sMag) + polyval(S, isky);
+end
+
+# regression function for leasqr()
+function smag = lsfn(sMag, p )
+	global sMagBreaks; 
+	global smagExtraValue;
+  smag = spline(sMagBreaks, [ p; smagExtraValue], sMag);
+end
+
+# 
+function [S, PP] = smag_approximation( color, sMag, isky, smag )
+
+  global sMagBreaks;
+  global smagExtraValue;
+    
+  switch ( color )
+	  case "SERCJ"
+      sMagBreaks = [6; 9.5; 10.0; 10.5; 11.0; 11.5; 12.0; 12.5; 13.0; 13.5; 14.0; 14.5; 15.0; 15.5; 16; 17; 22]; # ; 16.5; 17; 17.5; 18
+#      sMagBreaks = [6; 8; 9; 10; 11; 12; 13; 14.0; 16; 18; 22];
+      smagExtraValue = 22;
+  otherwise
+    error("No smag_spline_approximation() implemented for %s", color);
+  end
+
+  p = [sMagBreaks(1:(size(sMagBreaks,1)-1))];
+  [~, p,cvg,iter] = leasqr(sMag, smag, p, @lsfn, 1e-12, 200); # {stol,niter,wt,dp,dFdp,options}
+
+  PP = spline(sMagBreaks, [p; smagExtraValue]);
+  S = polyfit (isky, smag - ppval(PP,sMag), 3);
+
+  printf("PP: cvg=%d,iter=%d\n", cvg, iter);
+  disp(p);
+  printf("S:\n");
+  disp(S);
+    
+end
+
+
+function calibrate_stage3( color, plateid, noprep )
+
+  C = getjhk2smagcalib( color );
+
+  # get process id to format temporary file names
+  pid = getpid ();
+  printf("pid=%d\n", pid);
+
+  sname = sprintf("/tmp/scosmos.%d.%d.tmp", plateid, pid );
+  spscname = sprintf("/tmp/scosmos.psc.%d.%d.tmp", plateid, pid);
+
+  if ( noprep )
+    pscname = "psc.dat";
+  else
+    pscname = sprintf("/tmp/psc.%d.%d.tmp", plateid, pid);
+  end
+
+  # get spsc
+  if ( !mkspsc(plateid, sname, pscname, spscname, noprep, 0.25,0.30,0.30,5,20,4,20,4,20, 5, 18.3 ) )
+    printf("\nSKIP %d BECAUSE mkspsc() FAILS\n\n", plateid);
+    return;
+  end
+
+
+  # load reference stars
+  printf("load reference stars\n");
+  fid = popenq(spscname, "isky sMag j_m h_m k_m ra dec" );
+  if ( fid == -1 )
+    error("ERROR: can not read %s\n", fname);
+  end
+
+  v = transpose(fscanf(fid, "%lf", [7, Inf]));
+  pclose(fid);
+
+  # remove temp files
+  if ( noprep )
+    syscall("rm -f %s %s", sname, spscname);
+  else
+    syscall("rm -f %s %s %s", sname, pscname, spscname);
+  end
+
+  # remove stars with poor sky background
+  smin = min( v(:,1) ) + 1e6;
+  smax = max( v(:,1) ) - 1e6;
+  good = v(:,1) >= smin & v(:,1) <= smax;
+  if ( ~all(good) )
+    v = v (good,:);
+  end
+
+  # extract columns
+  isky = v(:,1)*1e-7;
+  sMag = v(:,2);
+  jm  = v(:,3);
+  hm  = v(:,4);
+  km  = v(:,5);
+  ra  = v(:,6);
+  dec = v(:,7);
+  clr = jm-km; 
+  smag = jhk2smag( C, jm, hm, km );
+
+
+  # reduce sMag->smag
+  NPASS = 15;
+  K = 4;
+  for pass = 1:NPASS
+
+    [S, PP] = smag_approximation( color, sMag, isky, smag );
+    cMag = smap(S, PP, sMag, isky);
+    dm = smag - cMag;
+    sigma = std(dm);
+
+    printf("* %d: sigma=%g rows=%d\n", pass, sigma, rows(sMag));
+
+    if ( pass < NPASS )
+    
+      droped = 0;
+      banks = [-10; 12; 14; 16; 100];
+
+      for i=1:size(banks)-1
+      
+        bank = sMag>=banks(i) & sMag<banks(i+1); 
+        sigma = std(dm(bank));
+        good = (abs(dm) < K * sigma) | ~bank;
+        if ( ~all( good ) )
+		      sMag = sMag(good);
+		      isky = isky(good);
+		      smag = smag(good);
+			    ra   = ra  (good);
+			    dec  = dec (good);
+          dm   = dm  (good);
+          cMag = cMag(good);
+          clr  = clr (good);
+          jm   = jm  (good);
+          droped = 1;
+        end
+      end
+      
+      if ( !droped )
+        break;
+      end
+      
+	  end
+  endfor
+
+  dirname="mc.stage3.res";
+  mkdir(dirname);
+  fname = sprintf("%s/mc.%d.res", dirname, plateid);
+  fid = fopen(fname,"w");
+  iss = mean(isky) * ones(size(ra));
+  fprintf(fid,"ra\tdec\tjm\tclr\tisky\tsMag\tsmag\tcMag\tpp\tdm\n");
+  fprintf(fid,"%15.9f\t%+15.9f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%+.3f\n",
+    transpose( [ ra dec jm clr isky sMag smag cMag smap(S,PP,sMag,iss) smag-cMag] ) );
+  fclose(fid);
+
+#  fname = sprintf("%s/mc.%d.sp", dirname, plateid);
+#  fid = fopen(fname,"w");
+#  fprintf(fid,"sMag\tcMag\n");
+#  xx = transpose([60:230]);
+#  isky = mean(isky) * ones(size(xx));
+#  sMag = xx*0.1;
+#  cMag = smap(S, PP, sMag, isky);
+#  fprintf(fid,"%.3f\t%.3f\n",transpose( [ sMag cMag ] ) );
+#  fclose(fid);
+  
+end
 
 #######################################################################
 
 
-
+stage = "";
 plateid = [];
-outname = "";
-stage = "stage1";
+calibname = "";
+color = "";
 noprep = 0;
 
-i = 0;
-while ( ++i <= nargin )
-
-  if ( strcmp(arg_list{i},"stage1") )
-    stage = "stage1";
-  elseif( strcmp(arg_list{i},"stage2") )
-    stage = "stage2";
-  elseif( strcmp(arg_list{i},"-o") )
-    if ( i < nargin )
-      outname = arg_list{++i};
-    else
-      show_usage( stderr );
-      return;
-    endif
-  elseif( strcmp(arg_list{i},"-noprep") )
-    noprep = 1
-  else
-    [x, ok] = str2num(arg_list{i});
-    if ( !ok )
-      fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
-      show_usage( stderr );
-      return;
-    end
-  plateid = [ plateid x ];
-  end
-end
-
-
-if ( size(plateid,2) < 1 || strcmp(outname,"") )
+if ( nargin < 1 )
   show_usage( stderr );
   return;
 end
 
-if ( strcmp(stage,"stage1" ) )
+stage = arg_list{1};
+i = 1;
+while ( ++i <= nargin )
 
-  pkg load optim;
+  switch( stage )
+   case "stage1"
+      if ( strcmp(arg_list{i},"-o") )
+        if ( i < nargin )
+          calibname = arg_list{++i}
+        else
+          show_usage( stderr );return;
+        endif
+      elseif ( strcmp(arg_list{i},"-noprep") )
+        noprep = 1
+      else
+        [x, ok] = str2num(arg_list{i});
+        if ( !ok )
+          fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+          show_usage( stderr );return;
+        end
+        plateid = [ plateid x ];
+      endif
 
-  for i = 1:size(plateid,2)
-    pid = plateid(i);
-    printf("\nPLATE %d\n", pid);
-    calibrate_jhk2smag( pid, outname, noprep );
-  end
+   case "stage2"
+    if ( strcmp( calibname, "" ) )
+      calibname = arg_list{i}
+    else
+      fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+      show_usage( stderr );return;
+    endif
 
+   case "stage3"
+      if ( strcmp(arg_list{i},"-c") )
+        if ( i < nargin )
+          color = arg_list{++i}
+        else
+          show_usage( stderr );return;
+        endif
+      elseif ( strcmp(arg_list{i},"-noprep") )
+        noprep = 1
+      else
+        [x, ok] = str2num(arg_list{i});
+        if ( !ok )
+          fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+          show_usage( stderr );return;
+        end
+        plateid = [ plateid x ];
+    endif
 
+  endswitch
 end
+
+
+switch( stage )
+
+ case "stage1"
+    if ( size(plateid,2) < 1 || strcmp(calibname,"") )
+      show_usage( stderr );
+      return;
+    end
+
+    pkg load optim;
+
+    for i = 1:size(plateid,2)
+      pid = plateid(i);
+      printf("\nPLATE %d\n", pid);
+      calibrate_stage1( pid, calibname, noprep );
+    end
+
+
+ case "stage2"
+    if ( strcmp(calibname,"") )
+      show_usage( stderr );
+      return;
+    end
+
+
+ case "stage3"
+    if ( size(plateid,2) < 1 || strcmp(color,"") )
+      show_usage( stderr );
+      return;
+    end
+
+    pkg load optim;
+
+    for i = 1:size(plateid,2)
+      pid = plateid(i);
+      printf("\nPLATE %d\n", pid);
+      calibrate_stage3( color, pid, noprep );
+    end
+
+
+ otherwise
+  show_usage( stderr );
+  return;
+endswitch
+
+
 
 #######################################################################
