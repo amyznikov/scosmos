@@ -27,7 +27,7 @@ end
 #######################################################################
 # inner join for scosmos and psc
 
-function status = mkspsc(plateid, sname, pscname, spscname, noprep, ej, eh, ek, jmin, jmax, hmin, hmax, kmin, kmax, sMagMin, sMagMax )
+function [status, A0, D0] = mkspsc(plateid, sname, pscname, spscname, noprep, ej, eh, ek, jmin, jmax, hmin, hmax, kmin, kmax, sMagMin, sMagMax )
 
   status = 0;
 
@@ -108,7 +108,8 @@ function calibrate_stage1( plateid, outputname, noprep )
     end
   end
 
-  if ( !mkspsc(plateid, sname, pscname, spscname, noprep,0.30,0.35,0.35,8.5,14.2,8,14,8,14,9,16.3 ) )
+  [status, A0, D0 ] = mkspsc(plateid, sname, pscname, spscname, noprep,0.30,0.35,0.35,8.5,15.2,8,14.5,8,14.5,10,17.5 );
+  if ( !status )
     printf("\nSKIP %d BECAUSE mkspsc() FAILS\n\n", plateid);
     return;
   end
@@ -150,25 +151,21 @@ function calibrate_stage1( plateid, outputname, noprep )
   # solve linear model
   printf("solve model\n");
 
-  NPASS = 15;
-  K = 6;
+  NPASS = 2;
+  K = 3;
   for pass = 1:NPASS
 
-    [C, sigma,~,E] = LinearRegression(MM,sMag);
+    [C, sigma,~,E] = LinearRegression(MM, sMag);
     sigma = sqrt(sigma);
 
-    printf("%d sigma=%g K=%g rows=%d\n", pass, sigma, K, rows(MM));
+    printf("%d sigma=%g rows=%d\n", pass, sigma, rows(MM));
 
     csmag = MM * C;
     dsmag = sMag - csmag;
 
     if ( pass < NPASS )
 
-      while ( all(good = abs(dsmag) < K * sigma) && K > 3 )
-        --K;
-      end
-
-      if ( all(good) )
+      if( all(good = abs(dsmag) < K * sigma) )
         break;
       end
 
@@ -194,7 +191,7 @@ function calibrate_stage1( plateid, outputname, noprep )
   fclose(fid);
 
 
-  dirname = "cjhk2smag";
+  dirname = "mc.stage1.res";
   syscall("mkdir -p %s", dirname);
   fname = sprintf("%s/%d.res", dirname, plateid);
   if ( (fid = fopen(fname,"w")) == -1 )
@@ -212,7 +209,7 @@ end
 
 
 #######################################################################
-# Select average of JHK->sMag calibration for all survey plates, 
+# Select average of JHK->sMag calibration for all survey plates,
 # dropping too large residuals
 
 function calibrate_stage2(calibname)
@@ -223,7 +220,7 @@ function calibrate_stage2(calibname)
   end
 
   v = fscanf(fid,"%lf", [4, Inf]);
-  pclose( fid );
+  fclose( fid );
 
   if ( size(v,1) != 4 )
     error("Invalid data in %s", calibname);
@@ -251,10 +248,10 @@ function calibrate_stage2(calibname)
     end
   end
 
-	printf("FINAL SOLUTION:\n");
-	printf("C = [%+9.6E\t%+9.6E\t%+9.6E\t%+9.6E]\n", C(1), C(2), C(3), C(4) );
-	printf("E = [%+9.6E\t%+9.6E\t%+9.6E\t%+9.6E]\n", E(1), E(2), E(3), E(4) );
-	printf("sMag(J,H,K) = %9.6E%+9.6E*J%+9.6E*H%+9.6E*K\n", C(1), C(2), C(3), C(4) );
+  printf("FINAL SOLUTION:\n");
+  printf("C = [%+9.6E %+9.6E %+9.6E %+9.6E]\n", C(1), C(2), C(3), C(4) );
+  printf("E = [%+9.6E %+9.6E %+9.6E %+9.6E]\n", E(1), E(2), E(3), E(4) );
+  printf("J2S(J,H,K) = %9.6E%+9.6E*J%+9.6E*H%+9.6E*K\n", C(1), C(2), C(3), C(4) );
 
 end
 
@@ -262,12 +259,12 @@ end
 # stage3 - non-linear spline approximation + extrapolation sMag->smag
 
 function C = getjhk2smagcalib( color )
-	switch ( color )
-		case "SERCJ"
-		  C = [ -1.550792E-01 +4.695458E+00 -1.681784E+00 -1.973197E+00 ];
-		otherwise
-		  error("No calibration data for %s. Use stage2 to generate and insert it into this code.", color);
-	end
+  switch ( color )
+    case "SERCJ"
+      C = [ -1.550792E-01 +4.695458E+00 -1.681784E+00 -1.973197E+00 ];
+    otherwise
+      error("No calibration data for %s. Use stage2 to generate and insert it into this code.", color);
+  end
 end
 
 function smag = jhk2smag( C, J, H, K )
@@ -278,26 +275,26 @@ end
 global sMagBreaks; # sMag spline breaks
 global smagExtraValue;
 
-# mapping (sMag,isky)->smag 
+# mapping (sMag,isky)->smag
 function smag = smap(S, PP, sMag, isky)
   smag = ppval(PP,sMag) + polyval(S, isky);
 end
 
 # regression function for leasqr()
 function smag = lsfn(sMag, p )
-	global sMagBreaks; 
-	global smagExtraValue;
+  global sMagBreaks;
+  global smagExtraValue;
   smag = spline(sMagBreaks, [ p; smagExtraValue], sMag);
 end
 
-# 
+#
 function [S, PP] = smag_approximation( color, sMag, isky, smag )
 
   global sMagBreaks;
   global smagExtraValue;
-    
+
   switch ( color )
-	  case "SERCJ"
+    case "SERCJ"
       sMagBreaks = [6; 9.5; 10.0; 10.5; 11.0; 11.5; 12.0; 12.5; 13.0; 13.5; 14.0; 14.5; 15.0; 15.5; 16; 17; 22]; # ; 16.5; 17; 17.5; 18
 #      sMagBreaks = [6; 8; 9; 10; 11; 12; 13; 14.0; 16; 18; 22];
       smagExtraValue = 22;
@@ -315,7 +312,7 @@ function [S, PP] = smag_approximation( color, sMag, isky, smag )
   disp(p);
   printf("S:\n");
   disp(S);
-    
+
 end
 
 
@@ -337,7 +334,8 @@ function calibrate_stage3( color, plateid, noprep )
   end
 
   # get spsc
-  if ( !mkspsc(plateid, sname, pscname, spscname, noprep, 0.25,0.30,0.30,5,20,4,20,4,20, 5, 18.3 ) )
+  status = mkspsc(plateid, sname, pscname, spscname, noprep, 0.25,0.30,0.30,5,20,4,20,4,20, 5, 18.3 );
+  if ( !status )
     printf("\nSKIP %d BECAUSE mkspsc() FAILS\n\n", plateid);
     return;
   end
@@ -376,7 +374,7 @@ function calibrate_stage3( color, plateid, noprep )
   km  = v(:,5);
   ra  = v(:,6);
   dec = v(:,7);
-  clr = jm-km; 
+  clr = jm-km;
   smag = jhk2smag( C, jm, hm, km );
 
 
@@ -393,21 +391,21 @@ function calibrate_stage3( color, plateid, noprep )
     printf("* %d: sigma=%g rows=%d\n", pass, sigma, rows(sMag));
 
     if ( pass < NPASS )
-    
+
       droped = 0;
       banks = [-10; 12; 14; 16; 100];
 
       for i=1:size(banks)-1
-      
-        bank = sMag>=banks(i) & sMag<banks(i+1); 
+
+        bank = sMag>=banks(i) & sMag<banks(i+1);
         sigma = std(dm(bank));
         good = (abs(dm) < K * sigma) | ~bank;
         if ( ~all( good ) )
-		      sMag = sMag(good);
-		      isky = isky(good);
-		      smag = smag(good);
-			    ra   = ra  (good);
-			    dec  = dec (good);
+          sMag = sMag(good);
+          isky = isky(good);
+          smag = smag(good);
+          ra   = ra  (good);
+          dec  = dec (good);
           dm   = dm  (good);
           cMag = cMag(good);
           clr  = clr (good);
@@ -415,11 +413,11 @@ function calibrate_stage3( color, plateid, noprep )
           droped = 1;
         end
       end
-      
+
       if ( !droped )
         break;
       end
-      
+
 	  end
   endfor
 
@@ -442,7 +440,7 @@ function calibrate_stage3( color, plateid, noprep )
 #  cMag = smap(S, PP, sMag, isky);
 #  fprintf(fid,"%.3f\t%.3f\n",transpose( [ sMag cMag ] ) );
 #  fclose(fid);
-  
+
 end
 
 #######################################################################
@@ -534,6 +532,8 @@ switch( stage )
       show_usage( stderr );
       return;
     end
+
+    calibrate_stage2(calibname);
 
 
  case "stage3"
