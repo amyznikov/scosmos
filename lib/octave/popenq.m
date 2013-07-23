@@ -26,20 +26,26 @@ function pid = popenq( fname, columns )
       fclose(pid);
       pid = -1;
 
-      headers = strsplit(headline," \t\n\r");
-      cnames  = strsplit(columns," \t\r\n;,");
+      headers = strsplit(headline," \t\n\r", 1);
+%      printf("** headers:\n");
+%      disp(headers);
+      
+      cnames  = strsplit(columns," \t\r\n;,",1);
+%			printf("** cnames:\n");
+%			disp(cnames);
 
+%      printf("\n");
+            
       cmd = 'awk ''{ print ';
 
       for i = 1 : size(cnames,2)
-
         for j = 1 : size(headers,2)
           if ( strcmp( headers{j}, cnames{i} ) )
             break;
           end
         end
 
-       if ( j >= size(headers,2) )
+       if ( j > size(headers,2) )
           error ('no column ''%s'' found in ''%s''',cnames{i}, fname);
         end
 
