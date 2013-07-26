@@ -3,21 +3,75 @@
 cols=""
 files=""
 cond=""
+xcond=""
+defs=""
+
+function showhelp()
+{
+  echo "Usage:";
+  echo "  ccut -f coma,delimited,list,of,columns [-x 'condition-expression'] [-v var=value ...] [FILE]";
+}
 
 while [ -n "$1" ] ; do
     arg=$1
     case $arg in
-     -f) shift; [ -z "$cols" ] && cols="$1" || cols="$cols\\t$1" ; cols=${cols//,/\\t} ;;
-     -c) shift; if [[ $cond != "" ]]; then echo "error: multiple -c switch not allowed." 1>&2; exit 1; else cond="$1"; fi ;;
-      *) files="$files $arg" ;;
+     --help)
+      showhelp;
+      exit 0
+      ;;
+
+     -f)
+      shift;
+      [ -z "$cols" ] && cols="$1" || cols="$cols\\t$1" ; cols=${cols//,/\\t}
+      ;;
+
+
+     -c)
+      shift;
+      if [[ $cond != "" ]] || [[ $xcond != "" ]] ; then
+        echo -e "Error: multiple conditions not allowed. Note that -c switch is depreceated, use -x instead" 1>&2;
+        exit 1;
+      else
+        cond="$1";
+      fi
+      ;;
+
+
+     -x)
+      shift;
+        if [[ $cond != "" ]] || [[ $xcond != "" ]] ; then
+          echo -e "Error: multiple conditions not allowed." 1>&2;
+          exit 1;
+        else
+          xcond="$1";
+        fi
+        ;;
+
+     -v)
+      shift;
+      defs="$defs -v $1"
+      ;;
+
+
+      *)
+        files="$files $arg"
+        ;;
+
     esac;
     shift;
 done
 
+
+if [[ -z "$cols" ]]; then
+  showhelp;
+  exit 1;
+fi
+
+
 start='
   BEGIN {
     # get output column names requested in command line
-    n = split(cols,col);
+    n = split(outputcols,col);
     for ( i = 1; i <= n; ++i) {
       ocn[i] = col[i];
     }
@@ -56,6 +110,12 @@ start='
   }
 '
 
+if [[ -n "$cond" ]]; then
+  cond=$(echo "$cond" | sed -r 's/([a-zA-Z_]\w*)/$ocff[\"\1\"]/g');
+elif [[ -n "$xcond" ]]; then
+  cond=$(echo "$xcond" | sed -r 's/@([a-zA-Z_]\w*)/$ocff[\"\1\"]/g');
+fi
+
 
 if [[ -z "$cond" ]] ; then
 end='
@@ -73,7 +133,6 @@ end='
 '
 else
 
-cond=$(echo "$cond" | sed -r 's/([a-zA-Z_]\w*)/$ocff[\"\1\"]/g')
 
 end="
   {
@@ -94,4 +153,6 @@ end="
 fi
 
 script="${start}${end}"
-awk -v cols="$cols" "$script" $files
+#echo "$script"
+
+awk $defs -v outputcols="$cols" "$script" $files
