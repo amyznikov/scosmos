@@ -1,15 +1,30 @@
 #!/bin/bash
 
-cols=""
+ocols=()
+ofnames=()
+ofbodys=()
+
 files=""
 cond=""
 xcond=""
 defs=""
+deffunc=()
 
 function showhelp()
 {
-  echo -e "Usage:\n  ccut -f coma,delimited,list,of,columns [-x 'condition-expression'] [-v var=value ...] [FILE]" 1>&2;
+  echo -e "Usage:\n  ccut -f coma,delimited,list,of,columns [-x 'condition-expression'] [-v var=value ...] [-df 'user-function-definition'] [FILE]" 1>&2;
 }
+
+
+function strstr() {
+  x="${1%%$2*}"
+  [[ $x = $1 ]] && echo -1 || echo ${#x}
+}
+
+K=0
+DF=0
+
+
 
 while [ -n "$1" ] ; do
     arg=$1
@@ -21,7 +36,63 @@ while [ -n "$1" ] ; do
 
      -f)
       shift;
-      [ -z "$cols" ] && cols="$1" || cols="$cols\\t$1" ; cols=${cols//,/\\t}
+      tmp="$1";
+      tmp=${tmp//\\t/ }
+      tmp=${tmp//\\n/ }
+
+      # split column names
+      cols=();
+      ncols=0;
+      scope=0;
+      j=0;
+      for (( i=0; i<"${#tmp}"; ++i ))
+      {
+	  if [[ ${tmp:i:1} == '(' ]]; then	      
+	      scope=$((scope+1));
+          elif [[ ${tmp:i:1} == ')' ]]; then
+	      scope=$((scope-1));
+          elif (( scope == 0 )) ; then
+	      if [[ ${tmp:i:1} == ',' ]]; then
+                 cols[ncols]=${tmp:j:i-j};
+                 ncols=$((ncols+1));
+                 j=$((i+1));
+	      fi;
+          fi
+      }
+
+      if (( scope != 0 )); then
+	  echo "ccut: unballansed () braces in ${tmp}" 1>&2;
+	  exit 1;
+      fi
+
+      if (( i > j )) ; then
+	  cols[ncols]=${tmp:j:i-j};
+	  ncols=$((ncols+1));
+      fi
+
+      for (( j=0; j<ncols; ++j ))
+      {
+          tmp=${cols[j]};
+
+          i=$(strstr "$tmp" ":");
+
+          if (( i == 0 )); then
+            echo "ccut: syntax error:$1";
+            exit 1;
+          fi
+
+          if (( i < 0 )); then
+            ocols[K]="$tmp";
+            ofnames[K]="get${ocols[K]}()";
+            ofbodys[K]="{return \$column[\"${ocols[K]}\"];}"
+          else
+            ocols[K]=${tmp:0:i};
+            ofnames[K]="get${ocols[K]}()";
+            ofbodys[K]=$(echo "{return ${tmp:i+1};}" | sed -r 's/@([a-zA-Z_]\w*)/$column[\"\1\"]/g');
+          fi
+
+          K=$((K+1));
+      }
       ;;
 
 
@@ -51,7 +122,12 @@ while [ -n "$1" ] ; do
       defs="$defs -v $1"
       ;;
 
-
+    -df)
+      shift;
+      deffunc[DF]=$(echo "function $1" | sed -r 's/@([a-zA-Z_]\w*)/$column[\"\1\"]/g');
+      DF=$((DF+1)); 
+      ;;
+      
       *)
         files="$files $arg"
         ;;
@@ -61,91 +137,121 @@ while [ -n "$1" ] ; do
 done
 
 
-start='
-  BEGIN {
-    # get output column names requested in command line
-    n = split(outputcols,col);
-    for ( i = 1; i <= n; ++i) {
-      ocn[i] = col[i];
-    }
-  }
-  NR == 1 {
-    # get column names from file header
-    for ( f = 1; f <= NF; ++f ) {
-      ocff[$f] = f;
-    }
-
-    if ( n == 0 ) {
-      print $0;
-    }
-    else {
-      # match requested column indexes with file header column indexes
-      for ( i = 1; i <= n; ++i )
-      {
-        for ( f = 1; f <= NF; ++f )
-        if ( $f == ocn[i] ) {
-          ocf[i] = f;
-          break;
-        }
-        if ( f > NF ) {
-          print "Column " ocn[i] " not found in file header" > "/dev/stderr"
-          exit 1;
-        }
-      }
-
-      # print output header
-      for ( i = 1; i < n; ++i ) {
-        printf("%s\t", $ocf[i]);
-      }
-      printf("%s\n", $ocf[n]);
-    }
-    next
-  }
-';
+script='';
+outcols=''
+outfuncs=''
 
 
 if [[ -n "$cond" ]]; then
-  cond=$(echo "$cond" | sed -r 's/([a-zA-Z_]\w*)/$ocff[\"\1\"]/g');
+  cond=$(echo "$cond" | sed -r 's/([a-zA-Z_]\w*)/$column[\"\1\"]/g');
 elif [[ -n "$xcond" ]]; then
-  cond=$(echo "$xcond" | sed -r 's/@([a-zA-Z_]\w*)/$ocff[\"\1\"]/g');
+  cond=$(echo "$xcond" | sed -r 's/@([a-zA-Z_]\w*)/$column[\"\1\"]/g');
 fi
 
 
-if [[ -z "$cond" ]] ; then
-end='
-  {
+
+script="$script  
+  function abs(x) { if (x<0) return -x; else return x;  }
+  function hypot(x,y) { return sqrt(x*x+y*y); }
+";
+
+for (( i=0; i<K; ++i ))
+{
+  script="$script
+   function ${ofnames[i]} ${ofbodys[i]}
+  ";
+
+ [[ -z "$outcols"  ]] && outcols="${ocols[i]}" || outcols="$outcols\\t${ocols[i]}";
+ [[ -z "$outfuncs" ]] && outfuncs="get${ocols[i]}" || outfuncs="$outfuncs\\tget${ocols[i]}";  
+}
+
+for (( i=0; i<DF; ++i ))
+{
+  script="$script
+   ${deffunc[i]}
+  ";
+}
+
+
+script="$script
+
+  BEGIN {
+    CONVFMT = \"%+.9f\";
+    pi=3.14159265358979323846;
+    # get output column names and its functions
+    n = split(outcols,colname);
+    n = split(outfuncs,colfunc);
+    for ( i = 1; i <= n; ++i) {
+      onames[i] = colname[i];
+      ofuncs[i] = colfunc[i];
+    }
+  }
+
+  NR == 1 { 
+
+    # gather column names from file header
+    for ( f = 1; f <= NF; ++f ) {
+      column[\$f] = f;
+    }
+
+    # print output header
     if ( n == 0 ) {
-      print $0;
+      print \$0;
     }
     else {
       for ( i = 1; i < n; ++i ) {
-        printf("%s\t", $ocf[i]);
+        printf(\"%s\\t\", onames[i]);
       }
-      printf("%s\n", $ocf[n]);
+      printf(\"%s\\n\", onames[n]);
+    }
+    next
+  }
+";
+
+# echo "script:"
+# echo "$script";
+# exit 0;
+
+
+if [[ -z "$cond" ]] ; then
+script="$script
+  {
+    if ( n == 0 ) {
+      print \$0;
+    }
+    else {
+      for ( i = 1; i < n; ++i ) {
+        fn = ofuncs[i];
+        printf(\"%s\\t\", @fn());
+      }
+      fn = ofuncs[n];
+      printf(\"%s\\n\", @fn());
     }
   }
-'
+";
+
 else
 
-
-end="
+script="$script
   {
     if ( ${cond} )
     {
-      if ( n == 0 ) {
+      if ( n == 0 ) {      
         print \$0;
       }
       else {
         for ( i = 1; i < n; ++i ) {
-          printf(\"%s\t\", \$ocf[i]);
+          fn = ofuncs[i];
+          printf(\"%s\\t\", @fn());
         }
-        printf(\"%s\n\", \$ocf[n]);
+        fn = ofuncs[n];
+        printf(\"%s\\n\", @fn());
       }
     }
   }
-"
+";
+
 fi
 
-script="${start}${end}"
 #echo "$script"
-awk $defs -v outputcols="$cols" "$script" $files
+awk $defs -v outcols="$outcols" -v outfuncs="$outfuncs" "$script" $files
