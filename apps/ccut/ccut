@@ -8,8 +8,7 @@ defs=""
 
 function showhelp()
 {
-  echo "Usage:";
-  echo "  ccut -f coma,delimited,list,of,columns [-x 'condition-expression'] [-v var=value ...] [FILE]";
+  echo -e "Usage:\n  ccut -f coma,delimited,list,of,columns [-x 'condition-expression'] [-v var=value ...] [FILE]" 1>&2;
 }
 
 while [ -n "$1" ] ; do
@@ -29,7 +28,7 @@ while [ -n "$1" ] ; do
      -c)
       shift;
       if [[ $cond != "" ]] || [[ $xcond != "" ]] ; then
-        echo -e "Error: multiple conditions not allowed. Note that -c switch is depreceated, use -x instead" 1>&2;
+        echo -e "ccut: multiple conditions not allowed. Note that -c switch is depreceated, use -x instead" 1>&2;
         exit 1;
       else
         cond="$1";
@@ -40,7 +39,7 @@ while [ -n "$1" ] ; do
      -x)
       shift;
         if [[ $cond != "" ]] || [[ $xcond != "" ]] ; then
-          echo -e "Error: multiple conditions not allowed." 1>&2;
+          echo -e "ccut: multiple conditions not allowed." 1>&2;
           exit 1;
         else
           xcond="$1";
@@ -60,12 +59,6 @@ while [ -n "$1" ] ; do
     esac;
     shift;
 done
-
-
-if [[ -z "$cols" ]]; then
-  showhelp;
-  exit 1;
-fi
 
 
 start='
@@ -108,7 +101,8 @@ start='
     }
     next
   }
-'
+';
+
 
 if [[ -n "$cond" ]]; then
   cond=$(echo "$cond" | sed -r 's/([a-zA-Z_]\w*)/$ocff[\"\1\"]/g');
@@ -154,5 +148,4 @@ fi
 
 script="${start}${end}"
 #echo "$script"
-
 awk $defs -v outputcols="$cols" "$script" $files
