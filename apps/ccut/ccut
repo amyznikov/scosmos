@@ -9,6 +9,11 @@ cond=""
 xcond=""
 defs=""
 deffunc=()
+rcols=()
+
+K=0
+DF=0
+RCC=0
 
 function showhelp()
 {
@@ -21,8 +26,6 @@ function strstr() {
   [[ $x = $1 ]] && echo -1 || echo ${#x}
 }
 
-K=0
-DF=0
 
 
 
@@ -83,14 +86,22 @@ while [ -n "$1" ] ; do
 
           if (( i < 0 )); then
             ocols[K]="$tmp";
+	    rcols[RCC]="$tmp";
             ofnames[K]="get${ocols[K]}()";
             ofbodys[K]="{return \$column[\"${ocols[K]}\"];}"
+	    RCC=$((RCC+1));
           else
             ocols[K]=${tmp:0:i};
             ofnames[K]="get${ocols[K]}()";
             ofbodys[K]=$(echo "{return ${tmp:i+1};}" | sed -r 's/@([a-zA-Z_]\w*)/$column[\"\1\"]/g');
-          fi
 
+	    rtmp=($(echo "${tmp:i+1}" | egrep -o '@\w+'));
+            for (( z=0; z<${#rtmp[@]}; ++z ))
+	    {
+	      rcols[RCC]=${rtmp[z]//@/};
+	      RCC=$((RCC+1));
+	    }
+          fi
           K=$((K+1));
       }
       ;;
@@ -114,6 +125,12 @@ while [ -n "$1" ] ; do
           exit 1;
         else
           xcond="$1";
+	  rtmp=($(echo "$xcond" | egrep -o '@\w+'));
+          for (( z=0; z<${#rtmp[@]}; ++z ))
+	  {
+	    rcols[RCC]=${rtmp[z]//@/};
+	    RCC=$((RCC+1));
+	  }
         fi
         ;;
 
@@ -129,8 +146,8 @@ while [ -n "$1" ] ; do
       ;;
       
       *)
-        files="$files $arg"
-        ;;
+      files="$files $arg"
+      ;;
 
     esac;
     shift;
@@ -161,8 +178,8 @@ for (( i=0; i<K; ++i ))
    function ${ofnames[i]} ${ofbodys[i]}
   ";
 
- [[ -z "$outcols"  ]] && outcols="${ocols[i]}" || outcols="$outcols\\t${ocols[i]}";
- [[ -z "$outfuncs" ]] && outfuncs="get${ocols[i]}" || outfuncs="$outfuncs\\tget${ocols[i]}";  
+ [[ -z "$outcols"  ]] && outcols="${ocols[i]}" || outcols="$outcols ${ocols[i]}";
+ [[ -z "$outfuncs" ]] && outfuncs="get${ocols[i]}" || outfuncs="$outfuncs get${ocols[i]}";  
 }
 
 for (( i=0; i<DF; ++i ))
@@ -172,27 +189,45 @@ for (( i=0; i<DF; ++i ))
   ";
 }
 
+rcols=$( IFS=$'\n'; echo "${rcols[*]}" | sort | uniq )
+
 
 script="$script
 
   BEGIN {
     CONVFMT = \"%+.9f\";
     pi=3.14159265358979323846;
+
     # get output column names and its functions
-    n = split(outcols,colname);
-    n = split(outfuncs,colfunc);
-    for ( i = 1; i <= n; ++i) {
-      onames[i] = colname[i];
-      ofuncs[i] = colfunc[i];
+    n = split(outcols,onames);
+    if ( split(outfuncs,ofuncs) != n ) {
+       print \"Bug in ccut. Contact author\" > \"/dev/stderr\";
+       exit 1;
     }
+
+    # gather referenced column names
+    rcc = split(refcols,rnames);
   }
 
   NR == 1 { 
 
     # gather column names from file header
-    for ( f = 1; f <= NF; ++f ) {
-      column[\$f] = f;
+    for ( i = 1; i <= NF; ++i ) {
+      column[\$i] = i;
     }
+
+    # check if all referenced columns are exists
+    for ( i = 1; i <= rcc; ++i ) {
+      for ( j = 1; j <= NF; ++j ) {
+        if ( rnames[i] == \$j ) {
+          break;
+        }
+      }
+      if ( j > NF ) {
+       print \"Column \" rnames[i] \" not found in file header\" > \"/dev/stderr\";
+       exit 1;
+      }
+    } 
 
     # print output header
     if ( n == 0 ) {
@@ -207,10 +242,6 @@ script="$script
     next
   }
 ";
-
-# echo "script:"
-# echo "$script";
-# exit 0;
 
 
 if [[ -z "$cond" ]] ; then
@@ -254,4 +285,10 @@ script="$script
 fi
 
 #echo "$script"
-awk $defs -v outcols="$outcols" -v outfuncs="$outfuncs" "$script" $files
+
+awk $defs \
+    -v outcols="$outcols" \
+    -v outfuncs="$outfuncs" \
+    -v refcols="$rcols" \
+    "$script" \
+    $files
