@@ -1,0 +1,215 @@
+#! /bin/bash
+
+myname="$(basename $0)"
+crefs=""
+plateids=""
+pairopts=""
+sel=0
+
+set -o pipefail
+
+function usage()
+{
+  echo "Usage:"
+  echo " $myname [pairing-options] -c cref1 [cref2 ..] -p plate-or-survey-id-1 [plate-or-survey-id-2 ...]";
+  echo "Example:"
+  echo " $myname r=2.5 dups=drop -c tyc2 apass sdss gspc24 -p 65537 65538 {66009..66012}";
+
+}
+
+
+function ssa_surveyid()
+{
+  local surveyid plateid
+
+  plateid=$1;
+  surveyid=0;
+
+  if (( plateid >= 65537 && plateid <= 66430 )); then
+    surveyid=1;  
+  elif (( plateid >= 131073 && plateid <= 131966 )); then
+    surveyid=2;
+  elif (( plateid >= 196609 && plateid <= 197502 )); then
+    surveyid=3;
+  elif (( plateid >= 262145 && plateid <= 262750 )); then
+    surveyid=4;
+  elif (( plateid >= 327689 && plateid <= 329298 )); then
+    surveyid=5;
+  elif (( plateid >= 393218 && plateid <= 394114 )); then
+    surveyid=6;
+  elif (( plateid >= 458754 && plateid <= 459650 )); then
+    surveyid=7;
+  elif (( plateid >= 524290 && plateid <= 525185 )); then
+    surveyid=8;
+  elif (( plateid >= 589961 && plateid <= 591443 )); then
+    surveyid=9;
+  fi
+
+  echo $surveyid;
+}
+
+function ssa_data_location()
+{
+  local myhost sid surveyname path
+
+  sid=$1
+  myhost=$(hostname);
+
+  if (( sid > 9 )); then
+    sid=$(ssa_surveyid $sid);
+  fi
+
+  case $sid in 
+    1) surveyname='SERC-J' ;;
+    2) surveyname='SERC-R' ;;
+    3) surveyname='SERC-I' ;;
+    4) surveyname='ESO-R'  ;;
+    *) echo "surveyid=$sid not supported"; exit 1; 
+  esac
+
+  if [[ "$myhost" == "jup" ]]; then  # my home machine for debugging
+    path="/wsdb/catalogs/scosmos/$surveyname";
+  elif [[ "$myhost" == "centos1" ]]; then  # KhAO 
+    path="/mnt/catalogs/scosmos/$surveyname/plates";
+  elif [[ "$myhost" == "hp" ]]; then  # my HP notebook
+    path="/opt/projects/scosmos/tests/mc/plates";
+  else
+    echo 'Path to scosmos data directory is not set';
+    exit 1;
+  fi
+
+  echo $path
+}
+
+
+
+while [[ -n "$1" ]]; do
+  
+  arg="$1"
+  case "$arg" in
+   -help|--help)
+    usage; 
+    exit 0
+    ;;
+
+   -c) 
+    sel=1 
+    ;;
+
+   -p) 
+    sel=2 
+    ;; 
+
+    *)
+    if (( sel == 1 )) ; then
+      crefs="$crefs $arg";
+    elif (( sel == 2 )) ; then
+      plateids="$plateids $arg";
+    else
+      pairopts="$pairopts $arg";
+    fi
+    ;;
+
+  esac
+  shift;
+done
+
+
+if [[ -z "$crefs" ]] ; then 
+  echo "$myname: no reference catalogs specified";
+  usage;
+  exit 1;
+fi
+
+if [[ -z "$plateids" ]] ; then 
+  echo "$myname: no plate or survey id specified";
+  usage;
+  exit 1;
+fi
+
+
+# create output directories
+for c in $crefs 
+{
+  mkdir -p serc.$c || exit 1;
+}
+
+
+# go over plate or survey ids
+for p in $plateids
+{
+  if (( p <= 9 )); then
+    pids=$(psql wsdb -c "copy(select plateid from ssa_plates where surveyid=$p order by plateid)to stdout");
+  else
+    pids=$p;
+  fi
+
+  for pid in $pids
+  {
+    dataloc=$(ssa_data_location $pid);
+
+    # check if this field is alrteady processed
+    allready=1;
+    for c in $crefs
+    {
+      outname=serc.$c/serc.$c.$pid.dat;
+      if [[ ! -e $outname ]]; then
+        allready=0;
+        break;
+      fi    
+    }
+
+    if (( allready )); then 
+      echo "$pid already processed";
+      continue;
+    fi
+  
+
+    # get scosmos plate dump
+    echo "extracting $dataloc/$pid.dat..."
+    ssa-plate-dump -hcf $dataloc/$pid.dat > scosmos.tmp || exit 1;
+
+    # combine with reference catalogs 
+    for c in $crefs
+    {
+      outname=serc.$c/serc.$c.$pid.dat;
+      if [[ -e $outname ]]; then
+	continue;
+      fi
+
+      echo "creating $outname ...";
+
+      case $c in
+        tyc2)
+          V=($(psql wsdb -c "copy(select rapnt*pi()/180,decpnt*pi()/180from ssa_plates where plateid=$pid) to stdout"));
+          A0=${V[0]};
+          D0=${V[1]};
+          psql wsdb -ae -c "copy (select * from tyc2 where spoint(ra,dec)@scircle(spoint($A0,$D0),6*pi()/180)) 
+               to stdout with csv header delimiter E'\\t' null 'NaN'" > cref.tmp  || exit 1;
+          ssa-pair-stars $pairopts scosmos.tmp rc1=3 dc1=4 cref.tmp rc2=5 dc2=6 -o $outname || exit 1;
+	  ;;
+
+        apass)
+          bzip2 -dfc /mnt/catalogs/apass/apass/apass.$pid.dat.bz2 > cref.tmp  || exit 1
+          ssa-pair-stars $pairopts scosmos.tmp rc1=3 dc1=4 cref.tmp rc2=1 dc2=3 ru2=deg du2=deg -o $outname || exit 1;
+	  ;;
+
+        gspc24)
+          ssa-pair-stars $pairopts scosmos.tmp rc1=3 dc1=4 /mnt/catalogs/gspc24/gspc24.tsv rc2=2 dc2=3 ru2=deg du2=deg -o $outname || exit 1;
+          ;;
+
+        sdss)
+          V=($(psql wsdb -c "copy(select rapnt*pi()/180,decpnt*pi()/180from ssa_plates where plateid=$pid) to stdout"));
+          A0=${V[0]};
+          D0=${V[1]};
+          psql wsdb -ae -c "copy (select * from sdss where spoint(ra,dec)@scircle(spoint($A0,$D0),6*pi()/180))
+               to stdout with csv header delimiter E'\\t' null 'NaN'" > cref.tmp  || exit 1;
+          ssa-pair-stars $pairopts scosmos.tmp rc1=3 dc1=4 cref.tmp rc2=1 dc2=2 -o $outname || exit 1;
+	;;
+
+      esac
+      
+    }
+  }
+}
+
