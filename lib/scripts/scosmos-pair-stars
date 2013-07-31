@@ -184,7 +184,7 @@ for p in $plateids
           V=($(psql wsdb -c "copy(select rapnt*pi()/180,decpnt*pi()/180from ssa_plates where plateid=$pid) to stdout"));
           A0=${V[0]};
           D0=${V[1]};
-          psql wsdb -ae -c "copy (select * from tyc2 where spoint(ra,dec)@scircle(spoint($A0,$D0),6*pi()/180)) 
+          psql wsdb -c "copy (select * from tyc2 where spoint(ra,dec)@scircle(spoint($A0,$D0),6*pi()/180)) 
                to stdout with csv header delimiter E'\\t' null 'NaN'" > cref.tmp  || exit 1;
           ssa-pair-stars $pairopts scosmos.tmp rc1=3 dc1=4 cref.tmp rc2=5 dc2=6 -o $outname || exit 1;
 	  ;;
@@ -202,7 +202,7 @@ for p in $plateids
           V=($(psql wsdb -c "copy(select rapnt*pi()/180,decpnt*pi()/180from ssa_plates where plateid=$pid) to stdout"));
           A0=${V[0]};
           D0=${V[1]};
-          psql wsdb -ae -c "copy (select * from sdss where spoint(ra,dec)@scircle(spoint($A0,$D0),6*pi()/180))
+          psql wsdb -c "copy (select * from sdss where spoint(ra,dec)@scircle(spoint($A0,$D0),6*pi()/180))
                to stdout with csv header delimiter E'\\t' null 'NaN'" > cref.tmp  || exit 1;
           ssa-pair-stars $pairopts scosmos.tmp rc1=3 dc1=4 cref.tmp rc2=1 dc2=2 -o $outname || exit 1;
 	;;
