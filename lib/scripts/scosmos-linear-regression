@@ -1,0 +1,20 @@
+#! /usr/bin/octave -qf
+
+pkg load optim;
+
+
+H   = fgets(stdin);
+C   = strtrim(strsplit(H,"\t"));
+NC  = size(C,2);
+V   = transpose(fscanf(stdin,"%lf",[NC, Inf]));
+NR  = size(V,1);
+X   = [ ones(NR,1) V(:,1:(NC-1)) ];
+Y   = V(:,NC);
+[P] = LinearRegression(X, Y);
+disp(P)
+
+printf("%s = %+.6f", C{NC}, P(1) );
+for i = 1:NC-1
+  printf(" %+.6f*%s", P(i+1), C{i} );
+end
+printf("\n");
