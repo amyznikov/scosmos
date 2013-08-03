@@ -2,19 +2,185 @@
 
 pkg load optim;
 
+arg_list = argv ();
+FNAME = "";
+K = 3;
+NP = 2;
+verb = 0;
+opt = 0;
+oet = 0;
+ofn = 0;
+opo = 0;
+oeo = 0;
 
-H   = fgets(stdin);
-C   = strtrim(strsplit(H,"\t"));
-NC  = size(C,2);
-V   = transpose(fscanf(stdin,"%lf",[NC, Inf]));
-NR  = size(V,1);
-X   = [ ones(NR,1) V(:,1:(NC-1)) ];
-Y   = V(:,NC);
-[P] = LinearRegression(X, Y);
-disp(P)
 
-printf("%s = %+.6f", C{NC}, P(1) );
-for i = 1:NC-1
-  printf(" %+.6f*%s", P(i+1), C{i} );
+function show_usage( stream )
+  fprintf (stream, "Usage:\n");
+  fprintf (stream, "  %s [-K {thrs}] [-NP {npass}] [-v] [-opt] \
+		      %[-oet] [-ofn] [-opo] [-oeo] [FILE]\n", program_name());
 end
-printf("\n");
+
+i = 0;
+while ( ++i <= nargin )
+
+  if ( strcmp(arg_list{i},"-K") )
+
+    if ( ++i > nargin )
+      fprintf(stderr,"Missing argument after -K switch")
+      show_usage( stderr );
+      exit(1);
+    end
+
+    [K, ok] = str2num(arg_list{i});
+    if ( !ok )
+      fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+      show_usage( stderr );
+      exit(1);
+    end
+    
+  elseif( strcmp(arg_list{i},"-NP") )
+    if ( ++i > nargin )
+       fprintf(stderr,"Missing argument after -NP switch")
+       show_usage( stderr );
+       exit(1);
+    end
+
+    [NP, ok] = str2num(arg_list{i});
+    if ( !ok )
+      fprintf(stderr,"Syntax error in argument: %s\n", arg_list{i});
+      show_usage( stderr );
+      exit(1);
+    end
+
+  elseif( strcmp(arg_list{i},"-v") )
+     verb = 1;
+  elseif( strcmp(arg_list{i},"-opt") )
+     opt = 1;
+  elseif( strcmp(arg_list{i},"-oet") )
+     oet = 1;
+  elseif( strcmp(arg_list{i},"-ofn") )
+     ofn = 1;
+  elseif( strcmp(arg_list{i},"-opo") )
+     opo = 1;
+  elseif( strcmp(arg_list{i},"-ope") )
+     ope = 1;
+  else
+      FNAME = arg_list{i}
+  end
+end
+
+
+if ( !opt && !ofn  && !opo )
+  opo = 1;
+end
+
+
+#######################################################################
+# Linear reduction
+
+
+
+if ( strcmp(FNAME,"") )
+  fid = stdin;
+elseif ((fid = fopen(FNAME,"r")) == -1 )
+  fprintf(stderr,"Can not read %s\n", FNAME);
+  exit(1);
+end
+
+
+# Read tab-separated file header 
+H   = fgets(fid);
+
+# split TSV into list of colum names
+C   = strtrim(strsplit(H,"\t"));
+
+# get number of input columns
+NC  = size(C,2);
+
+# read whole file into matrix V 
+V   = transpose(fscanf(stdin,"%lf",[NC, Inf]));
+
+# close input file
+if ( fid != stdin )
+   fclose(fid);
+end
+
+# get number of input rows
+NR  = size(V,1);
+
+# form input matrix X for LinearRegression(X, Y)
+X   = [ ones(NR,1) V(:,1:(NC-1)) ];
+
+# form input vector Y for LinearRegression(X, Y);
+Y   = V(:,NC);
+
+
+# do LinearRegression() in NPASS
+for pass = 1 : NP 
+
+  [P,sigma,~,E] = LinearRegression(X, Y);
+  sigma = sqrt(sigma);
+
+  if ( verb ) 
+    fprintf(stderr,"sigma:%g N=%g\n", sigma, rows(Y));
+  end
+
+  if ( K <= 0 )
+     break;
+  end
+
+  if ( pass<NP )
+    if ( all(good = (abs(Y-X*P)<K*sigma) ) )
+      break;
+    end
+    X = X(good,:);
+    Y = Y(good);
+  end
+end
+
+
+# Apply requested output formatings
+
+if ( opt )
+    printf("%+g\t",P(1:NC-1));
+    if ( !oet )
+      printf("%+g\n",P(NC));
+    else
+      printf("%+g\t",P(NC));
+      printf("%+g\t",E(1:NC-1));
+      printf("%+g\n",E(NC));
+    end
+end
+
+if ( oet && !opt )
+    printf("%+g\t",E(1:NC-1));
+    printf("%+g\n",E(NC));
+end
+
+
+if ( ofn )
+  printf("%s(",C{NC});
+  for i = 1:NC-2
+    printf("%s,",C{i});
+  end
+  printf("%s) = ",C{NC-1});
+  printf("%+.6f",  P(1) );
+  for i = 1:NC-1
+    printf(" %+.6f*%s", P(i+1), C{i} );
+  end
+  printf("\n");
+end
+
+
+if ( opo )
+  printf("P = [\n");
+  printf("%+g\n",P);
+  printf("]\n");
+end
+
+if ( oeo )
+  printf("E = [\n");
+  printf("%+g\n",E);
+  printf("]\n");
+end
+
