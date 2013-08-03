@@ -12,18 +12,45 @@ oet = 0;
 ofn = 0;
 opo = 0;
 oeo = 0;
-
+Z = 0;
 
 function show_usage( stream )
+
+  fprintf (stream, "%s\n", program_name() );
+  fprintf (stream, "  Simple script to quickly make linear reduction of data in TSV columns\n" );
+  fprintf (stream, "  Beginning columns are arguments (factors), last column is target to be approximated.\n" );
+  fprintf (stream, "  A.Myznikov, Aug 2013\n");
+  fprintf (stream, "\n");
   fprintf (stream, "Usage:\n");
-  fprintf (stream, "  %s [-K {thrs}] [-NP {npass}] [-v] [-opt] \
-		      %[-oet] [-ofn] [-opo] [-oeo] [FILE]\n", program_name());
+  fprintf (stream, "  %s [OPTIONS] [FILE]\n", program_name());
+  fprintf (stream, "\n");
+  fprintf (stream, "OPTIONS:\n");
+  fprintf (stream, " -v       : print some diagnostic to stderr\n");
+  fprintf (stream, " -K {K}   : dop large residuals above K*sigma (implies K>0 and NP>0)\n");
+  fprintf (stream, " -NP {NP} : max number of passes while dropping large residuals. Set NP=0 or K=0 to disable dropping\n");
+  fprintf (stream, " -Z       : force zero point\n");
+  fprintf (stream, " -opt     : output solution in tsv (usefull for batch processing)\n");
+  fprintf (stream, " -oet     : output solution errors in tsv\n");
+  fprintf (stream, " -ofn     : output solution as function definition\n");
+  fprintf (stream, " -opo     : output solution as octave vector\n");
+  fprintf (stream, " -oeo     : output solution errors as octave vector\n");
+  fprintf (stream, "\n");
+  fprintf (stream, " FILE     : input TSV file with header.\n");
+  fprintf (stream, "  If no input FIE given then stdin is assumed\n");
+  fprintf (stream, "\n");
+  fprintf (stream, "A stupid test:\n");
+  fprintf (stream, "$ (echo -e \"x\\ty\" && for ((x=0; x<10; ++x)); { y=$((5-2*x)); echo -e \"$x\\t$y\";} ) | lib/scripts/scosmos-linear-regression -ofn\n");
+  fprintf (stream, "y(x) = +5.000000 -2.000000*x\n");
+  fprintf (stream, "\n");
 end
 
 i = 0;
 while ( ++i <= nargin )
 
-  if ( strcmp(arg_list{i},"-K") )
+  if ( strcmp(arg_list{i},"-help") || strcmp(arg_list{i},"--help")  )
+      show_usage( stdout );
+      exit (0);
+  elseif ( strcmp(arg_list{i},"-K") )
 
     if ( ++i > nargin )
       fprintf(stderr,"Missing argument after -K switch")
@@ -54,6 +81,8 @@ while ( ++i <= nargin )
 
   elseif( strcmp(arg_list{i},"-v") )
      verb = 1;
+  elseif( strcmp(arg_list{i},"-Z") )
+     Z = 1;
   elseif( strcmp(arg_list{i},"-opt") )
      opt = 1;
   elseif( strcmp(arg_list{i},"-oet") )
@@ -109,7 +138,12 @@ end
 NR  = size(V,1);
 
 # form input matrix X for LinearRegression(X, Y)
-X   = [ ones(NR,1) V(:,1:(NC-1)) ];
+if ( Z )
+  X   = V(:,1:(NC-1));
+else
+  X   = [ ones(NR,1) V(:,1:(NC-1)) ];
+end
+
 
 # form input vector Y for LinearRegression(X, Y);
 Y   = V(:,NC);
@@ -158,20 +192,6 @@ if ( oet && !opt )
 end
 
 
-if ( ofn )
-  printf("%s(",C{NC});
-  for i = 1:NC-2
-    printf("%s,",C{i});
-  end
-  printf("%s) = ",C{NC-1});
-  printf("%+.6f",  P(1) );
-  for i = 1:NC-1
-    printf(" %+.6f*%s", P(i+1), C{i} );
-  end
-  printf("\n");
-end
-
-
 if ( opo )
   printf("P = [\n");
   printf("%+g\n",P);
@@ -183,4 +203,28 @@ if ( oeo )
   printf("%+g\n",E);
   printf("]\n");
 end
+
+
+
+if ( ofn )
+  printf("%s(",C{NC});
+  for i = 1:NC-2
+    printf("%s,",C{i});
+  end
+  printf("%s) = ",C{NC-1});
+
+  if ( Z )
+    for i = 1:NC-1
+      printf(" %+.6f*%s", P(i), C{i} );
+    end
+  else
+    printf("%+.6f",  P(1) );
+    for i = 1:NC-1
+      printf(" %+.6f*%s", P(i+1), C{i} );
+    end
+  end
+
+  printf("\n");
+end
+
 
