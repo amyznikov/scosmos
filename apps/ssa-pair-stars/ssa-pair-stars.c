@@ -51,6 +51,13 @@ struct obj_t {
 } obj_t;
 
 
+/** object match */
+typedef
+struct pair_t {
+  double dra, ddec, dr;       /*< in radians */
+  const obj_t * obj;
+} pair_t;
+
 
 
 
@@ -199,6 +206,14 @@ static int load_objects(FILE * input, int rc, int dc, int ru, int du, char heade
       obj->dec *= PI / 180;
     }
 
+    while ( obj->ra < 0 ) {
+      obj->ra += 2 * PI;
+    }
+
+    while ( obj->ra > 2 * PI ) {
+      obj->ra -= 2 * PI;
+    }
+
     obj->line = strdup(line);
     ccarray_set_size(objects, ++size );
   }
@@ -246,6 +261,31 @@ static int cmpra( const void * p1, const void * p2 )
   return 0;
 }
 
+
+static void gather(const ccarray_t * objects, double ra, double dec, double ramin, double ramax,
+    pair_t pairs[MAX_PAIRS], size_t * numpairs, double r)
+{
+  size_t size, pos;
+
+  size = ccarray_size(objects);
+  pos = ccarray_lowerbound(objects, 0, size, cmpra, &ramin);
+
+  for (; pos < size && *numpairs < MAX_PAIRS; ++pos )
+  {
+    const obj_t * obj = ccarray_peek(objects, pos);
+    if ( obj->ra > ramax ) {
+      break;
+    }
+
+    pairs[*numpairs].dra = (obj->ra - ra) * cos((obj->dec+dec) / 2);
+    pairs[*numpairs].ddec = (obj->dec - dec);
+
+    if ( (pairs[*numpairs].dr = hypot(pairs[*numpairs].dra, pairs[*numpairs].ddec)) <= r ) {
+      pairs[*numpairs].obj = obj;
+      ++*numpairs;
+    }
+  }
+}
 
 /** show usage info */
 static void show_usage( FILE * output, int argc, char * argv[] )
@@ -344,7 +384,7 @@ int main(int argc, char *argv[])
   double r = -1;
 
   int i;
-  size_t size1, size2, pos1;
+  size_t size, pos, pos2;
 
   /* parse command line */
 
@@ -633,42 +673,36 @@ int main(int argc, char *argv[])
     fprintf(output, "\n");
   }
 
-  size1 = ccarray_size(list[0]);
-  size2 = ccarray_size(list[1]);
+  size = ccarray_size(list[0]);
 
-  for ( pos1 = 0; pos1 < size1; ++pos1 )
+  for ( pos = 0; pos < size; ++pos )
   {
-    double dra[MAX_PAIRS];
-    double ddec[MAX_PAIRS];
-    double dr[MAX_PAIRS];
-    const obj_t * pairs[MAX_PAIRS];
+    pair_t pairs[MAX_PAIRS];
     size_t numpairs = 0;
+    const obj_t * obj1;
+    double ramin, ramax, rcd;
 
-    const obj_t * obj1 = ccarray_peek(list[0], pos1);
-    const double rcd = r / cos(obj1->dec);
-    const double ramin = obj1->ra - rcd;
-    const double ramax = obj1->ra + rcd;
+    obj1  = ccarray_peek(list[0], pos);
+    rcd   = r / cos(obj1->dec);
+    ramin = obj1->ra - rcd;
+    ramax = obj1->ra + rcd;
 
-    size_t pos2 = ccarray_lowerbound(list[1], 0, size2, cmpra, &ramin);
-    for ( ; pos2 < size2; ++pos2 )
-    {
-      const obj_t *  obj2 = ccarray_peek(list[1], pos2);
+    if ( ramin < 0 ) {
+      gather(list[1], obj1->ra, obj1->dec, ramin + 2 * PI, 2 * PI, pairs, &numpairs, r);
+      ramin = 0;
+    }
 
-      if ( obj2->ra > ramax ) {
-        break;
-      }
+    if ( ramax > 2 * PI ) {
+      gather(list[1], obj1->ra, obj1->dec, 0, ramax - 2 * PI, pairs, &numpairs, r);
+      ramax = 0;
+    }
 
-      if ( numpairs == MAX_PAIRS ) {
-        fprintf(stderr, "Warning: too many pairs for '%s'\n", obj1->line);
-        break;
-      }
+    if ( ramax > ramin ) {
+      gather(list[1], obj1->ra, obj1->dec, ramin, ramax, pairs, &numpairs, r);
+    }
 
-      dra[numpairs] = (obj2->ra - obj1->ra) * cos((obj1->dec + obj2->dec) / 2);
-      ddec[numpairs] = (obj2->dec - obj1->dec);
-
-      if ( (dr[numpairs] = hypot(dra[numpairs], ddec[numpairs])) <= r ) {
-        pairs[numpairs++] = obj2;
-      }
+    if ( numpairs >= MAX_PAIRS ) {
+      fprintf(stderr,"SERIOUS WARNING: too may pairs found, output may be incorrect\n");
     }
 
     if ( numpairs < 1 ) {
@@ -683,14 +717,14 @@ int main(int argc, char *argv[])
       case dups_drop:
         if ( numpairs == 1 )
         {
-          fprintf(output, "%s\t%s", obj1->line, pairs[0]->line);
+          fprintf(output, "%s\t%s", obj1->line, pairs[0].obj->line);
 
           if ( !append_diffs ) {
             fprintf(output, "\n");
           }
           else {
-            fprintf(output, "\t%+9.3f\t%+9.3f\t%+9.3f\n", dra[0] * 180 * 3600 / PI, ddec[0] * 180 * 3600 / PI,
-                dr[0] * 180 * 3600 / PI);
+            fprintf(output, "\t%+9.3f\t%+9.3f\t%+9.3f\n", pairs[0].dra * 180 * 3600 / PI,
+                pairs[0].ddec * 180 * 3600 / PI, pairs[0].dr * 180 * 3600 / PI);
           }
         }
         break;
@@ -698,14 +732,14 @@ int main(int argc, char *argv[])
       case dups_keep:
         for ( pos2 = 0; pos2 < numpairs; ++pos2 )
         {
-          fprintf(output, "%s\t%s", obj1->line, pairs[pos2]->line);
+          fprintf(output, "%s\t%s", obj1->line, pairs[pos2].obj->line);
 
           if ( !append_diffs ) {
             fprintf(output, "\n");
           }
           else {
-            fprintf(output, "%+9.3f\t%+9.3f\t%+9.3f\n", dra[pos2] * 180 * 3600 / PI, ddec[pos2] * 180 * 3600 / PI,
-                dr[pos2] * 180 * 3600 / PI);
+            fprintf(output, "%+9.3f\t%+9.3f\t%+9.3f\n", pairs[pos2].dra * 180 * 3600 / PI,
+                pairs[pos2].ddec * 180 * 3600 / PI, pairs[pos2].dr * 180 * 3600 / PI);
           }
         }
         break;
