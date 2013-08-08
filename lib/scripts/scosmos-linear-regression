@@ -12,6 +12,8 @@ oet = 0;
 ofn = 0;
 opo = 0;
 oeo = 0;
+os  = 0;
+ost = 0;
 Z = 0;
 
 function show_usage( stream )
@@ -31,15 +33,27 @@ function show_usage( stream )
   fprintf (stream, " -Z       : force zero point\n");
   fprintf (stream, " -opt     : output solution in tsv (usefull for batch processing)\n");
   fprintf (stream, " -oet     : output solution errors in tsv\n");
+  fprintf (stream, " -ost     : output final stddev in tsv\n");
   fprintf (stream, " -ofn     : output solution as function definition\n");
   fprintf (stream, " -opo     : output solution as octave vector\n");
   fprintf (stream, " -oeo     : output solution errors as octave vector\n");
+  fprintf (stream, " -os      : output final stddev\n");
   fprintf (stream, "\n");
   fprintf (stream, " FILE     : input TSV file with header.\n");
   fprintf (stream, "  If no input FIE given then stdin is assumed\n");
   fprintf (stream, "\n");
   fprintf (stream, "A stupid test:\n");
-  fprintf (stream, "$ (echo -e \"x\\ty\" && for ((x=0; x<10; ++x)); { y=$((5-2*x)); echo -e \"$x\\t$y\";} ) | lib/scripts/scosmos-linear-regression -ofn\n");
+  fprintf (stream, "amyznikov@jup:~$ (echo -e \"x\\ty\" && for ((x=0; x<10; ++x)); { y=$((5-2*x)); echo -e \"$x\\t$y\";} ) | scosmos-linear-regression -oeo -opo -os -ost -opt -oet -ofn\n");
+  fprintf (stream, "+5	  -2	   +8.30815e-16		 +2.38451e-31  +8.36671e-33\n");
+  fprintf (stream, "P = [\n");
+  fprintf (stream, "+5\n");
+  fprintf (stream, "-2\n");
+  fprintf (stream, "]\n");
+  fprintf (stream, "E = [\n");
+  fprintf (stream, "+2.38451e-31\n");
+  fprintf (stream, "+8.36671e-33\n");
+  fprintf (stream, "]\n");
+  fprintf (stream, "S = +8.30815e-16\n");
   fprintf (stream, "y(x) = +5.000000 -2.000000*x\n");
   fprintf (stream, "\n");
 end
@@ -91,15 +105,19 @@ while ( ++i <= nargin )
      ofn = 1;
   elseif( strcmp(arg_list{i},"-opo") )
      opo = 1;
-  elseif( strcmp(arg_list{i},"-ope") )
-     ope = 1;
+  elseif( strcmp(arg_list{i},"-oeo") )
+     oeo = 1;
+  elseif( strcmp(arg_list{i},"-ost") )
+     ost = 1;
+  elseif( strcmp(arg_list{i},"-os") )
+     os = 1;
   else
       FNAME = arg_list{i}
   end
 end
 
 
-if ( !opt && !ofn  && !opo )
+if ( !opt && !ofn  && !opo && !oeo )
   opo = 1;
 end
 
@@ -175,22 +193,31 @@ end
 
 # Apply requested output formatings
 
+
 if ( opt )
     printf("%+g\t",P(1:NC-1));
-    if ( !oet )
-      printf("%+g\n",P(NC));
+    printf("%+g",P(NC));
+    if ( oet || ost )
+       printf("\t");
     else
-      printf("%+g\t",P(NC));
-      printf("%+g\t",E(1:NC-1));
-      printf("%+g\n",E(NC));
+       printf("\n");
     end
 end
 
-if ( oet && !opt )
-    printf("%+g\t",E(1:NC-1));
-    printf("%+g\n",E(NC));
+
+if ( ost )
+   printf("%+g",sigma);
+   if ( oet )
+     printf("\t");
+   else
+     printf("\n");
+   end
 end
 
+if ( oet )
+   printf("%+g\t",E(1:NC-1));
+   printf("%+g\n",E(NC));
+end
 
 if ( opo )
   printf("P = [\n");
@@ -204,7 +231,9 @@ if ( oeo )
   printf("]\n");
 end
 
-
+if ( os )
+   printf("S = %+g\n",sigma);
+end
 
 if ( ofn )
   printf("%s(",C{NC});
