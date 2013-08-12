@@ -123,8 +123,8 @@ for i = 1:size(FLIST,2)
   columns = 'Johnson_B,Johnson_V,cosmag,isky,ra,dec,x,y';
 
   cond = [ '@Johnson_B!=\"NA\" && @Johnson_V!=\"NA\" && ' ...
-           '(@Johnson_B-@Johnson_V)>-0.5 && (@Johnson_B-@Johnson_V)<2.5 && ' ...
-           '@Johnson_B>10 && @Johnson_V>9.5 &&' ...
+           '(@Johnson_B-@Johnson_V)>-0.75 && (@Johnson_B-@Johnson_V)<3.5 && ' ...
+           '@Johnson_V>10 && @Johnson_B>10.5 &&' ...
            '@cosmag>-26 && @cosmag<-23 && '  ...
 	   'abs(@prfStat) < 4'
           ];
@@ -145,36 +145,53 @@ for i = 1:size(FLIST,2)
   end
 
 
+  % remove bad isky
+  smin1 = min( v(:,4) ) + 1e6;
+  smax1 = max( v(:,4) ) - 1e6;
+  v = v(v(:,4) >= smin1 & v(:,4) <= smax1,:);
+
+
   % extract columns
-  Bj     = v(:,1);
-  Vj     = v(:,2);
-  cosmag = v(:,3);
-  isky   = v(:,4);
-  ra     = v(:,5);
-  dec    = v(:,6);
-  x      = v(:,7); 
-  y      = v(:,8); 
+  oBj    = v(:,1);
+  oVj    = v(:,2);
+  ocosmag= v(:,3);
+  oisky  = v(:,4) * 1e-7;
+  ora    = v(:,5);
+  odec   = v(:,6);
+  ox     = v(:,7); 
+  oy     = v(:,8); 
+
+
+  Bj     = oBj;
+  Vj     = oVj;
+  cosmag = ocosmag;
+  isky   = oisky;
+  ra     = ora;
+  dec    = odec;
+  x      = ox;
+  y      = oy;
+
   RA     = mean(ra)*180/pi;
   DE     = mean(dec)*180/pi;
 
+
   % Make linear regression
-  %  Bj = c0 + c1 * scosmos + c2*(Bj-Vj)
+  %  Bj = c0 + c1 * scosmos + c2*(Bj-Vj) + c3*iksy + c4*isky^2 + c5*isky^3
   %
   % The Bc will defined as:
   %  Bc = c0 + c1 * scosmos
 
   for pass = 1:NPASS
 
-    MM = [ ones(size(cosmag)) cosmag (Bj-Vj) ];
+    MM = [ ones(size(cosmag)) cosmag (Bj-Vj) isky isky.^2 isky.^3 ];
 
     [A, sigma] = LinearRegression(MM, Bj);
     sigma = sqrt(sigma);
 
     printf('* %d sigma=%g rows=%d\n', pass, sigma, rows(MM));
-    printf('A1 = %+g\n',A(1));
-    printf('A2 = %+g\n',A(2));
-    printf('A3 = %+g\n',A(3));
-   
+    for i = 1:size(A,1)
+      printf('A%d = %+g\n',i,A(i));
+    end
 
     if ( K == 0 || pass == NPASS || all(good=abs(Bj-MM*A)<K*sigma) )
       break;
@@ -200,7 +217,12 @@ for i = 1:size(FLIST,2)
         fprintf(stderr,'can not write %s\n', outname);
         exit (1);
       end
-      fprintf(fid,'file\tRA\tDEC\tN\tS\tA0\tA1\tA2\n');
+      
+      fprintf(fid,'file\tRA\tDEC\tN\tS');
+      for i = 1:size(A,1)
+	fprintf(fid,'\tA%d',i);
+      end
+      fprintf(fid,'\n');
       fclose(fid);
     end
 
@@ -211,21 +233,27 @@ for i = 1:size(FLIST,2)
       exit (1);
     end
 
-    fprintf( fid, '%s\t%7.3f\t%+8.3f\t%d\t%.3f\t%+.6f\t%+.6f\t%+.6f\n',
-      fname, RA, DE, rows(cosmag), sigma, A(1), A(2), A(3) );
-   fclose(fid);
+    fprintf( fid, '%s\t%7.3f\t%+8.3f\t%d\t%.3f', 
+        fname, RA, DE, rows(cosmag), sigma );
+    for i = 1:size(A)
+     fprintf(fid,'\t%+.6E',A(i));
+    end
+    fprintf(fid,'\n');
+    fclose(fid);
+
   end
 
   fname = sprintf('%s.res',fname);
   fid = fopen(fname,'w');
   fprintf(fid,'ra\tdec\tx\ty\tr\tBj\tVj\tcosmag\tisky\tBc\tdM\n');
   
-  Bc = A(1) + A(2) * cosmag;
-  dM = Bj - A(3)*(Bj-Vj) - Bc;
-  r  = sqrt((x - 177500).^2 + (y - 177500).^2); 
+  MM = [ ones(size(ocosmag)) ocosmag oisky oisky.^2 oisky.^3 ]; 
+  Bc = MM * transpose([ A(1) A(2) A(4) A(5) A(6) ]);
+  dM = oBj - A(3)*(oBj-oVj) - Bc;
+  r  = sqrt((ox - 177500).^2 + (oy - 177500).^2); 
 
   fprintf(fid,'%.9f\t%+.9f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%+.3f\n',
-   transpose([ra*180/pi dec*180/pi x y r Bj Vj cosmag isky Bc dM]));
+    transpose([ora*180/pi odec*180/pi ox oy r oBj oVj ocosmag oisky Bc dM]));
 
   fclose (fid);
 
