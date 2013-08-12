@@ -125,9 +125,10 @@ for i = 1:size(FLIST,2)
   cond = [ '@Johnson_B!=\"NA\" && @Johnson_V!=\"NA\" && ' ...
            '(@Johnson_B-@Johnson_V)>-0.75 && (@Johnson_B-@Johnson_V)<3.5 && ' ...
            '@Johnson_V>10 && @Johnson_B>10.5 &&' ...
-           '@cosmag>-26 && @cosmag<-23.6 && '  ...
 	   'abs(@prfStat) < 4'
           ];
+
+%           '@cosmag>-26 && @cosmag<-23.6 && '  ...
 
   cmd = sprintf('ccut %s -f "%s" -x "%s"', fname, columns, cond);
 
@@ -162,17 +163,14 @@ for i = 1:size(FLIST,2)
   oy     = v(:,8); 
 
 
-  Bj     = oBj;
-  Vj     = oVj;
-  cosmag = ocosmag;
-  isky   = oisky;
-  ra     = ora;
-  dec    = odec;
-  x      = ox;
-  y      = oy;
-
-  RA     = mean(ra)*180/pi;
-  DE     = mean(dec)*180/pi;
+  % select cosmag range 
+  good   = ocosmag > -26 & ocosmag < -23.6;
+  Bj     = oBj(good);
+  Vj     = oVj(good);
+  cosmag = ocosmag(good);
+  isky   = oisky(good);
+  RA     = mean(ora)*180/pi;
+  DE     = mean(odec)*180/pi;
 
 
   % Make linear regression
@@ -201,10 +199,6 @@ for i = 1:size(FLIST,2)
     Vj = Vj(good);
     cosmag = cosmag(good);
     isky = isky(good);
-    ra = ra(good);
-    dec = dec(good);
-    x = x(good);
-    y = y(good);
 
   end
 
