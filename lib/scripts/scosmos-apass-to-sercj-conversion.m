@@ -22,12 +22,15 @@ arg_list = argv ();
 
 FLIST = {};
 outname = '';
+K = 3;
+NPASS = 5;
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 function show_usage( stream )
   fprintf(stream, 'USAGE:\n');
-  fprintf(stream, '  %s [-o {output-name}] apass.sercj.dat ...\n', program_name());
+  fprintf(stream, '  %s [-o {output-name}] [-K K] [-N NPASS] apass.sercj.dat ...\n', program_name());
 end
 
 
@@ -41,11 +44,43 @@ while ( ++i <= nargin )
   elseif ( strcmp(arg_list{i},'-o') )
 
     if ( ++i > nargin )
-      fprintf(stderr,'missing output name after -o argument\n');
+      fprintf(stderr,'missing output name after -o switch\n');
+      show_usage(stderr);
+      exit(0);
+    end
+
+    outname = arg_list{i}
+
+  elseif ( strcmp(arg_list{i},'-K') )
+
+    if ( ++i > nargin )
+      fprintf(stderr,'missing K after -K switch\n');
+      show_usage(stderr);
+      exit(0);
+    end
+
+   [K, ok] = str2num(arg_list{i})
+    if ( !ok )
+      fprintf(stderr,'Syntax error: %s\n',arg_list{i});
+      show_usage( stderr );
+      exit(1);
+    end
+
+
+  elseif ( strcmp(arg_list{i},'-N') )
+
+    if ( ++i > nargin )
+      fprintf(stderr,'missing NPASS after -N switch\n');
       show_usage(stdout);
       exit(0);
     end
-    outname = arg_list{i}
+
+   [NPASS, ok] = str2num(arg_list{i})
+    if ( !ok )
+      fprintf(stderr,'Syntax error: %s\n',arg_list{i});
+      show_usage( stderr );
+      exit(1);
+    end
 
   else
     FLIST{size(FLIST,2)+1} = arg_list{i};
@@ -128,9 +163,6 @@ for i = 1:size(FLIST,2)
   % The Bc will defined as:
   %  Bc = c0 + c1 * scosmos
 
-  K = 3;
-  NPASS = 1;
-
   for pass = 1:NPASS
 
     MM = [ ones(size(cosmag)) cosmag (Bj-Vj) ];
@@ -180,7 +212,7 @@ for i = 1:size(FLIST,2)
     end
 
     fprintf( fid, '%s\t%7.3f\t%+8.3f\t%d\t%.3f\t%+.6f\t%+.6f\t%+.6f\n',
-      fname, RA, DE, rows(MJ), sigma, A(1), A(2), A(3) );
+      fname, RA, DE, rows(cosmag), sigma, A(1), A(2), A(3) );
    fclose(fid);
   end
 
