@@ -1,0 +1,68 @@
+#! /bin/bash
+
+
+outdir='magrefs'
+mkdir -p $outdir || exit 1
+
+set -o pipefail
+
+scosmos_columns='ra,dec,cosmag,isky,x,y,aI,bI,class,blend,quality,prfStat,sMag'
+
+plateids=$(psql wsdb -c "copy(select plateid from ssa_plates where surveyid=1 order by plateid)to stdout");
+for p in $plateids
+{
+    outname=$outdir/magref.$p.dat
+
+    A=$(octave -qf --no-window-system --eval "disp(getJohnson2Bc($p));");
+    echo "$p A=$A"
+
+
+    # 1. TYC2: Convert BT,VT -> Bj,Vj -> Bc
+    tyc2="/mnt/catalogs/scosmos/SERC-J/serc.tyc2/serc.tyc2.$p.dat"
+
+    T2BJ=($(octave -qf --no-window-system --eval "disp(getT2Bj($p));"));
+    B0=${T2BJ[0]};
+    B1=${T2BJ[1]};
+    B2=${T2BJ[2]};
+
+    T2VJ=($(octave -qf --no-window-system --eval "disp(getT2Vj($p));"));
+    V0=${T2VJ[0]};
+    V1=${T2VJ[1]};
+    V2=${T2VJ[2]};
+
+
+    cond='@isky<6e7 && @e_btmag<0.3 && @e_vtmag < 0.3 && @prox > 8 && @cosmag<-25.5'
+    ccut -f "${scosmos_columns},EB:@e_btmag,EV:@e_vtmag,CLR:getclr(),Bc:getbc(),C:1"  \
+         -x "$cond" \
+	 -df "getclr() { bj=$B0+$B1*@btmag+$B2*(@btmag-@vtmag); vj=$V0+$V1*@vtmag+$V2*(@btmag-@vtmag); return (bj-vj);}" \
+	 -df "getbc()  { bj=$B0+$B1*@btmag+$B2*(@btmag-@vtmag); vj=$V0+$V1*@vtmag+$V2*(@btmag-@vtmag); return bj-$A*(bj-vj);}" \
+         $tyc2 > $outname || exit 1
+
+
+
+    # 2. APASS: Convert Johnson_B,Johnson_V -> Bc
+    apass="/mnt/catalogs/scosmos/SERC-J/apass.sercj/apass.sercj.$p.dat"
+    cond="@isky<6e7 && abs(@prfStat) < 5 && @class==2 && @aI>0 && @bI/@aI>0.5 && and(@quality,128)==0 && \
+          @Johnson_B!=\"NA\" && @Johnson_V!=\"NA\" && @Johnson_B>11 && @Johnson_V>10.5 && \
+          (@Johnson_B-@Johnson_V)>-0.75 && (@Johnson_B-@Johnson_V)<3.5 && @B_err<0.2 && @Verr<0.2";
+
+    ccut -f "${scosmos_columns},EB:@B_err,EV:@Verr,CLR:@Johnson_B-@Johnson_V,Bc:mkbc(),C:2"  \
+         -x "$cond" \
+	 -df "mkbc() { return @Johnson_B-$A*(@Johnson_B-@Johnson_V);}" \
+         $apass | tail -n +2 >> $outname || exit 1
+
+
+
+    # 3. GSPC24: Convert Bmag1,Vmag1 -> Bc
+    gspc="/mnt/catalogs/scosmos/SERC-J/serc.gspc24/serc.gspc24.$p.dat"
+    cond="@isky<6e7 && abs(@prfStat) < 5 && \
+          @Bmag1!=\"NA\" && @Vmag1!=\"NA\" && @Bmag1>11 && @Bmag1<30 && @Vmag1>11 && @Vmag1<30 && \
+          @e_Bmag1<0.25 && @e_Vmag1<0.25";
+
+    ccut -f "${scosmos_columns},EB:@e_Bmag1,EV:@e_Vmag1,CLR:@Bmag1-@Vmag1,Bc:mkbc(),C:3"  \
+         -x "$cond" \
+	 -df "mkbc() { return @Bmag1-$A*(@Bmag1-@Vmag1); }" \
+         $gspc | tail -n +2 >> $outname || exit 1
+
+
+}

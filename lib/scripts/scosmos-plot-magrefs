@@ -1,0 +1,31 @@
+#! /usr/bin/gnuplot
+
+outname = 'magrefs'
+epsname = sprintf('%s.eps',outname)
+pdfname = sprintf('%s.pdf',outname);
+
+set term post enhanced color font 'Arial,10'
+set output epsname
+set grid xtics ytics lt 1 lw 0.1 lc rgb 'gray'
+
+set xlabel 'cosmag'
+set xtics 0.5 font ',6'
+set xrange [-29:-19.5]
+
+
+set ylabel 'Bc'
+set ytics 0.50 font ',6'
+set yrange [8:22]
+
+color(c)=c==1?0xFF0000:c==2?0x00CC00:0x0000EE
+
+flist = system('ls -1 /mnt/big1/scosmos/magrefs/magref.*.dat')
+
+do for [ f in flist ] {
+   print f
+   fname = system(sprintf('basename %s .dat',f))
+   set title fname
+
+   plot sprintf('<ccut -x "@C==1||@C==2" %s', f) u (column('cosmag')):(column('Bc')):(color(column('C'))) w d lc rgb variable notitle, \
+        sprintf('<ccut -x "@C==3" %s', f) u (column('cosmag')):(column('Bc')) w p pt 5 ps 0.15 lc rgb 'blue' notitle
+}

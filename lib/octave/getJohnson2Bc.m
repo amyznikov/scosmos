@@ -906,6 +906,6 @@ function A = getJohnson2Bc( plateid )
     +2.884387E-01  % 66430 
     ];
 
-  A = C(plateid - 65537+1);
+  A = C(plateid - 65537 + 1);
 
 endfunction
