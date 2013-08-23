@@ -65,14 +65,19 @@ end
 % Compute Bc from cosmag
 function bc = getbc(P, cosmag, isky, x, y)
 
-  NA = 5;
+  NA = 4;
   P1 = P( 1:NA );
   P2 = P( NA + 1 : NA + 3);
   P3 = P( NA + 4 : NA + 8);
 
-  bc = P1(1)+P1(2)./(exp(P1(3)*(cosmag-P1(5)))+exp(P1(4)*(cosmag-P1(5)))+ 1) + ...
+  bc = P1(1)+P1(2)*exp(-P1(3)*exp(cosmag*P1(4))) + ...
        P2(1)*isky + P2(2)*isky.^2 + P2(3)*isky.^2 + ...
        P3(1)*x + P3(2)*y + P3(3)*x.*y + P3(4)*x.^2 + P3(5)*y.^2;
+
+% P1(1)+P1(2)./(exp(P1(3)*(cosmag-P1(5)))+exp(P1(4)*(cosmag-P1(5)))+
+% 1) + ...
+
+
 end
 
 
@@ -88,10 +93,10 @@ end
 
 function P = bc_approximation( Bc, cosmag, isky, x, y )
 
-  p  = [ 22;-26; 0.6;0.1;-25;  0;0;0; 0;0;0;0;0];
+  p  = [ 21;-17;2500;0.325;  0;0;0; 0;0;0;0;0];
   MM = [ cosmag isky x y];
 
-  [~, P,cvg,iter] = leasqr(MM, Bc, p, @lsfn, 1e-12, 200); %  {stol,niter,wt,dp,dFdp,options}
+  [~, P,cvg,iter] = leasqr(MM, Bc, p, @lsfn, 1e-9, 1200); %  {stol,niter,wt,dp,dFdp,options}
   printf('cvg:%d iter:%d\n', cvg, iter);
   printf('P:\n');
   disp(P);
