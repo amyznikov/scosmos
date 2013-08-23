@@ -7,7 +7,7 @@
 %
 %
 
-function [ objID xmin xmax ymin ymax area ipeak cosmag isky \
+function [ objID ra dec xmin xmax ymin ymax area ipeak cosmag isky \
   xCen yCen aU bU thetaU aI bI thetaI class pa \
   ap1 ap2 ap3 ap4 ap5 ap6 ap7 ap8 \
   blend quality prfStat prfMag gMag sMag ] = load_targets( plateid )
@@ -69,8 +69,8 @@ function [ objID xmin xmax ymin ymax area ipeak cosmag isky \
 
   objID       = v(:,1);
 %  parentID    = v(:,2);
-%  ra          = v(:,3);
-%  dec         = v(:,4);
+  ra          = v(:,3);
+  dec         = v(:,4);
   xmin        = v(:,5);
   xmax        = v(:,6);
   ymin        = v(:,7);

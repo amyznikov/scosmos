@@ -126,15 +126,15 @@ for i = 1:size(FLIST,2)
   [~, ~, ~, m] = regexp(fname,'\d+');
   [plateid,ok] = str2num(m{1});
   if ( !ok )
-    fprintf(stderr,'can not get plateid from file name %s\n');
+    fprintf(stderr,'can not get plateid from file name %s\n', fname);
     continue;
   end
 
   % check if this plate is already processed
   if ( ~strcmp(outname,'') && exist(outname,'file') )
-     status = system(sprintf('fgrep -q "^%d" %s', plateid, outname ));
+     status = system(sprintf('grep -q "^%d" %s', plateid, outname ));
      if ( status == 0 )
-       printf('SKIP %s: ALREADY PROCESSES\n', fname);
+       printf('SKIP %s: ALREADY PROCESSED\n', fname);
        continue;
      end
   end
