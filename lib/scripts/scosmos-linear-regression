@@ -145,7 +145,7 @@ C   = strtrim(strsplit(H,"\t"));
 NC  = size(C,2);
 
 # read whole file into matrix V 
-V   = transpose(fscanf(stdin,"%lf",[NC, Inf]));
+V   = transpose(fscanf(fid,"%lf",[NC, Inf]));
 
 # close input file
 if ( fid != stdin )
