@@ -1,5 +1,9 @@
 #! /usr/bin/octave -qf
 
+#
+# Quickly make non-linear data fit in TSV columns
+#
+
 pkg load optim;
 
 arg_list = argv ();
@@ -20,41 +24,33 @@ PVALUES = [];
 function show_usage( stream )
 
   fprintf (stream, '%s\n', program_name() );
-  fprintf (stream, '  Simple script to quickly make non-linear data fit in TSV columns\n' );
-  fprintf (stream, '  Beginning columns are arguments (factors), last column is target to be approximated.\n' );
-  fprintf (stream, '  A.Myznikov, Aug 2013\n');
+  fprintf (stream, '  Quickly make non-linear data fit in TSV columns\n' );
+  fprintf (stream, '  Function to be approximated should use input column names as arguments.\n' );
+  fprintf (stream, '  A.Myznikov, Sep 2013\n');
   fprintf (stream, '\n');
   fprintf (stream, 'Usage:\n');
-  fprintf (stream, '  %s [OPTIONS] [-i FILE] -p GUESS [GUESS ...]\n', program_name());
+  fprintf (stream, '  %s [OPTIONS] [-i FILE] -f FUNCTION -p GUESS [GUESS ...]\n', program_name());
   fprintf (stream, '\n');
   fprintf (stream, 'OPTIONS:\n');
   fprintf (stream, ' -v       : debug mode\n');
-  fprintf (stream, ' -f "f(arglist) = body"\n');
-  fprintf (stream, ' -p param1=guess1 [param2=guess2 ...]\n');
+  fprintf (stream, ' -f "f(args) = body" : target function definition (name must reference target column, formulas must use matlab/octave syntax)\n');
+  fprintf (stream, ' -p param1=guess1 [param2=guess2 ...] : space-delimited list of parameter names and initial guess\n');
   fprintf (stream, ' -i INPUT-FILE-NAME: input TSV file with header.\n');
-  fprintf (stream, ' -K {K}   : dop large residuals above K*sigma (implies K>0 and NP>0)\n');
+  fprintf (stream, ' -K {K}   : drop large residuals above K*sigma (implies K>0 and NP>0)\n');
   fprintf (stream, ' -NP {NP} : max number of passes while dropping large residuals. Set NP=0 or K=0 to disable dropping\n');
   fprintf (stream, ' -onv     : output solution as name=value pairs\n');
-  fprintf (stream, ' -opt     : output solution in tsv (usefull for batch processing)\n');
-  fprintf (stream, ' -ost     : output final stddev in tsv\n');
+  fprintf (stream, ' -opt     : output solution in TSV (usefull for batch processing)\n');
+  fprintf (stream, ' -ost     : output final stddev in TSV\n');
   fprintf (stream, ' -opo     : output solution as octave vector\n');
   fprintf (stream, ' -os      : output final stddev\n');
   fprintf (stream, '\n');
   fprintf (stream, '  If no input INPUT-FILE-NAME given then stdin is assumed\n');
   fprintf (stream, '\n');
-  fprintf (stream, 'A stupid test:\n');
-  fprintf (stream, 'amyznikov@jup:~$ (echo -e "x\\ty" && for ((x=0; x<10; ++x)); { y=$((5-2*x)); echo -e "$x\\t$y\";} ) | scosmos-linear-regression -oeo -opo -os -ost -opt -oet -ofn\n');
-  fprintf (stream, '+5	  -2	   +8.30815e-16		 +2.38451e-31  +8.36671e-33\n');
-  fprintf (stream, 'P = [\n');
-  fprintf (stream, '+5\n');
-  fprintf (stream, '-2\n');
-  fprintf (stream, ']\n');
-  fprintf (stream, 'E = [\n');
-  fprintf (stream, '+2.38451e-31\n');
-  fprintf (stream, '+8.36671e-33\n');
-  fprintf (stream, ']\n');
-  fprintf (stream, 'S = +8.30815e-16\n');
-  fprintf (stream, 'y(x) = +5.000000 -2.000000*x\n');
+  fprintf (stream, 'A quick test:\n');
+  fprintf (stream, 'amyznikov@jup:~$ (echo -e "x\\ty" && for((x=0; x<30; ++x )) ; { y=$(echo "5*s(0.02*$x)-1" | bc -l); echo -e "$x\\t$y"; }) | scosmos-lsfit -f "y(x)=a0*sin(a1*x)+a2" -p a0=1 a1=0.1 a2=0\n');
+  fprintf (stream, 'a0 = 5\n');
+  fprintf (stream, 'a1 = 0.02\n');
+  fprintf (stream, 'a2 = -1\n');
   fprintf (stream, '\n');
 end
 
@@ -139,9 +135,18 @@ while ( ++i <= nargin )
 end
 
 
+if ( strcmp(FUNCTION,'') )
+  show_usage( stderr );
+  exit(1);   
+end
+
+
+
 if ( !opt && !onv && !opo )
   onv = 1;
 end
+
+
 
 
 #######################################################################
