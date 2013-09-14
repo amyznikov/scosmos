@@ -1,0 +1,319 @@
+#! /usr/bin/octave -qf
+
+pkg load optim;
+
+arg_list = argv ();
+INPUTFILE = '';
+K = 3;
+NP = 2;
+verb = 0;
+opt = 0;
+onv = 0;
+opo = 0;
+os  = 0;
+ost = 0;
+Z = 0;
+FUNCTION = '';
+PNAMES = {};
+PVALUES = [];
+
+function show_usage( stream )
+
+  fprintf (stream, '%s\n', program_name() );
+  fprintf (stream, '  Simple script to quickly make non-linear data fit in TSV columns\n' );
+  fprintf (stream, '  Beginning columns are arguments (factors), last column is target to be approximated.\n' );
+  fprintf (stream, '  A.Myznikov, Aug 2013\n');
+  fprintf (stream, '\n');
+  fprintf (stream, 'Usage:\n');
+  fprintf (stream, '  %s [OPTIONS] [-i FILE] -p GUESS [GUESS ...]\n', program_name());
+  fprintf (stream, '\n');
+  fprintf (stream, 'OPTIONS:\n');
+  fprintf (stream, ' -v       : debug mode\n');
+  fprintf (stream, ' -f "f(arglist) = body"\n');
+  fprintf (stream, ' -p param1=guess1 [param2=guess2 ...]\n');
+  fprintf (stream, ' -i INPUT-FILE-NAME: input TSV file with header.\n');
+  fprintf (stream, ' -K {K}   : dop large residuals above K*sigma (implies K>0 and NP>0)\n');
+  fprintf (stream, ' -NP {NP} : max number of passes while dropping large residuals. Set NP=0 or K=0 to disable dropping\n');
+  fprintf (stream, ' -onv     : output solution as name=value pairs\n');
+  fprintf (stream, ' -opt     : output solution in tsv (usefull for batch processing)\n');
+  fprintf (stream, ' -ost     : output final stddev in tsv\n');
+  fprintf (stream, ' -opo     : output solution as octave vector\n');
+  fprintf (stream, ' -os      : output final stddev\n');
+  fprintf (stream, '\n');
+  fprintf (stream, '  If no input INPUT-FILE-NAME given then stdin is assumed\n');
+  fprintf (stream, '\n');
+  fprintf (stream, 'A stupid test:\n');
+  fprintf (stream, 'amyznikov@jup:~$ (echo -e "x\\ty" && for ((x=0; x<10; ++x)); { y=$((5-2*x)); echo -e "$x\\t$y\";} ) | scosmos-linear-regression -oeo -opo -os -ost -opt -oet -ofn\n');
+  fprintf (stream, '+5	  -2	   +8.30815e-16		 +2.38451e-31  +8.36671e-33\n');
+  fprintf (stream, 'P = [\n');
+  fprintf (stream, '+5\n');
+  fprintf (stream, '-2\n');
+  fprintf (stream, ']\n');
+  fprintf (stream, 'E = [\n');
+  fprintf (stream, '+2.38451e-31\n');
+  fprintf (stream, '+8.36671e-33\n');
+  fprintf (stream, ']\n');
+  fprintf (stream, 'S = +8.30815e-16\n');
+  fprintf (stream, 'y(x) = +5.000000 -2.000000*x\n');
+  fprintf (stream, '\n');
+end
+
+i = 0;
+pmode=0;
+while ( ++i <= nargin )
+
+  if ( pmode )    
+    [argname,guess,n] = sscanf(arg_list{i},'%[A-z0-9_]=%lf','C');
+    if ( n == 2 )
+      PNAMES{size(PNAMES,2)+1} = argname;
+      PVALUES = [PVALUES; guess];
+      continue;
+    end
+  end
+
+  pmode = 0;
+
+  if ( strcmp(arg_list{i},'-help') || strcmp(arg_list{i},'--help')  )
+    show_usage( stdout );
+    exit (0);
+  elseif ( strcmp(arg_list{i},'-K') )
+
+    if ( ++i > nargin )
+      fprintf(stderr,'Missing argument after -K switch')
+      show_usage( stderr );
+      exit(1);
+    end
+
+    [K, ok] = str2num(arg_list{i});
+    if ( !ok )
+      fprintf(stderr,'Syntax error in argument: %s\n', arg_list{i});
+      show_usage( stderr );
+      exit(1);
+    end
+    
+  elseif( strcmp(arg_list{i},'-NP') )
+    if ( ++i > nargin )
+       fprintf(stderr,'Missing argument after -NP switch')
+       show_usage( stderr );
+       exit(1);
+    end
+
+    [NP, ok] = str2num(arg_list{i});
+    if ( !ok )
+      fprintf(stderr,'Syntax error in argument: %s\n', arg_list{i});
+      show_usage( stderr );
+      exit(1);
+    end
+
+  elseif( strcmp(arg_list{i},'-f') )
+    if ( ++i > nargin )
+       fprintf(stderr,'Missing argument after -f switch')
+       show_usage( stderr );
+       exit(1);
+    end
+    FUNCTION = arg_list{i};
+  elseif( strcmp(arg_list{i},'-v') )
+     verb = 1;
+  elseif( strcmp(arg_list{i},'-Z') )
+     Z = 1;
+  elseif( strcmp(arg_list{i},'-opt') )
+     opt = 1;
+  elseif( strcmp(arg_list{i},'-onv') )
+     onv = 1;
+  elseif( strcmp(arg_list{i},'-opo') )
+     opo = 1;
+  elseif( strcmp(arg_list{i},'-ost') )
+     ost = 1;
+  elseif( strcmp(arg_list{i},'-os') )
+     os = 1;
+  elseif ( strcmp(arg_list{i},'-p') ) 
+     pmode = 1;
+  elseif ( strcmp(arg_list{i},'-i') ) 
+    if ( ++i > nargin )
+       fprintf(stderr,'Missing input file name after -i switch')
+       show_usage( stderr );
+       exit(1);
+    end
+    INPUTFILE = arg_list{i};
+  end
+end
+
+
+if ( !opt && !onv && !opo )
+  onv = 1;
+end
+
+
+#######################################################################
+# LSFIT
+
+
+
+if ( strcmp(INPUTFILE,'') )
+  fid = stdin;
+elseif ((fid = fopen(INPUTFILE, 'r')) == -1 )
+  fprintf(stderr,'Can not read %s\n', INPUTFILE);
+  exit(1);
+end
+
+
+# Parse function signature and arguments
+[SIGNATURE, BODY, n] = sscanf(FUNCTION,'%[^=]=%s','C');
+[FNAME,FARGS,n] = sscanf(SIGNATURE,'%[A-z0-9_](%[^)])','C');
+ARGLIST = strsplit(FARGS, ',', 0);
+NUMARGS = size(ARGLIST, 2);
+
+if ( verb )
+   fprintf(stderr,'FUNCTION: %s\n',FUNCTION);
+   fprintf(stderr,'BODY: %s\n',BODY);
+   fprintf(stderr,'SIGNATURE: %s\n',SIGNATURE);
+   fprintf(stderr,'FNAME: %s\n',FNAME);
+   fprintf(stderr,'FARGS: %s\n',FARGS);
+   fprintf(stderr,'NUMARGS: %d\n',NUMARGS);
+end
+
+# Read tab-separated file header 
+H   = fgets(fid);
+
+
+# Split TSV into list of colum names
+C   = strtrim(strsplit(H,"\t"));
+
+
+# Get number of input columns
+NC  = size(C,2);
+
+
+# Find target column index in input stream header
+FC = 0;
+for j = 1 : NC
+  if ( strcmp(FNAME,C{j}) )
+    FC = j;
+  end
+end
+if ( FC == 0 )
+  fprintf(stderr,'No column %s found in stream header\n', FNAME);
+  exit(1);
+end
+
+
+
+# Map TSV columns to function args
+cindex = zeros(NUMARGS,1);
+for i = 1 : NUMARGS
+  for j = 1 : NC
+      if ( strcmp(ARGLIST{i},C{j}) )
+	 cindex(i) = j;
+      end
+  end
+  if ( cindex(i) == 0 )
+     fprintf(stderr,'No column %s fount in input header\n', ARGLIST{i});
+     exit(1);
+  end 
+end
+
+
+# Create temporary directory and function file
+tmpdir=sprintf('/tmp/scosmos-lsfit.%d/',getpid());
+mkdir(tmpdir);
+addpath(tmpdir);
+
+ftmp = fopen(sprintf('%s/__lsfunc.m',tmpdir),'w');
+fprintf(ftmp,'function [f] = __lsfunc(__LSX, __LSP)\n');
+for i=1 : NUMARGS
+  fprintf(ftmp,'  %s = __LSX(:,%d);\n', ARGLIST{i}, i);
+end
+for i=1 : size(PNAMES,2)
+  fprintf(ftmp,'  %s = __LSP(%d);\n', PNAMES{i}, i);
+end
+fprintf(ftmp,'  f = %s;\n', BODY);
+fprintf(ftmp,'end\n');
+fclose(ftmp);
+
+
+
+
+# Read whole file into matrix V 
+V = transpose(fscanf(fid,'%lf',[NC, Inf]));
+
+# Close input file
+if ( fid != stdin )
+   fclose(fid);
+end
+
+# Get number of input rows
+NR = size(V,1);
+
+
+# Form input matrix X for leastsquares()
+X   = V(:,cindex);
+
+# form target vector Y for leastsquares();
+Y   = V(:,FC);
+
+
+P  = PVALUES;
+
+# do leastsquares() in NPASS
+for pass = 1 : NP 
+
+  [~, P, cvg, iter] = leasqr(X, Y, P, @__lsfunc, 1e-9, 1200); % stol,niter,wt,dp,dFdp,options
+  dY = Y - __lsfunc(X,P);
+  sigma = std(dY);
+  
+  if ( verb ) 
+    fprintf(stderr, '%d cvg:%d iter:%d sigma:%g N=%d\n',pass, cvg, \
+            iter, sigma, rows(Y));
+    fprintf(stderr,'P:\n');
+    fprintf(stderr,'%g\n',P);
+   end
+
+  if ( K <= 0 )
+     break;
+  end
+
+  if ( pass < NP )
+    if ( all(good = (abs(dY) < K * sigma) ) )
+      break;
+    end
+    X = X(good,:);
+    Y = Y(good);
+  end
+end
+
+
+# Apply requested output formatings
+
+
+if ( opt )
+    printf('%+g\t',P(1:NC-1));
+    printf('%+g',P(NC));
+    if ( ost )
+       printf('\t');
+    else
+       printf('\n');
+    end
+end
+
+if ( ost )
+   printf('%+g\n',sigma);
+end
+
+if ( opo )
+  printf('P = [\n');
+  printf('%+g\n',P);
+  printf(']\n');
+end
+
+if ( onv )
+   for ( i = 1:size(PNAMES,2) )
+     printf('%s = %g\n',PNAMES{i}, P(i));
+   end
+end
+
+if ( os )
+   printf('S = %+g\n',sigma);
+end
+
+
+rmdir(tmpdir,'s');
