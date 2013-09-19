@@ -13,6 +13,7 @@ NP = 2;
 verb = 0;
 opt = 0;
 onv = 0;
+ov = 0;
 opo = 0;
 os  = 0;
 ost = 0;
@@ -39,6 +40,7 @@ function show_usage( stream )
   fprintf (stream, ' -K {K}   : drop large residuals above K*sigma (implies K>0 and NP>0)\n');
   fprintf (stream, ' -NP {NP} : max number of passes while dropping large residuals. Set NP=0 or K=0 to disable dropping\n');
   fprintf (stream, ' -onv     : output solution as name=value pairs\n');
+  fprintf (stream, ' -ov      : like -onv but do not print names\n');
   fprintf (stream, ' -opt     : output solution in TSV (usefull for batch processing)\n');
   fprintf (stream, ' -ost     : output final stddev in TSV\n');
   fprintf (stream, ' -opo     : output solution as octave vector\n');
@@ -116,6 +118,8 @@ while ( ++i <= nargin )
      opt = 1;
   elseif( strcmp(arg_list{i},'-onv') )
      onv = 1;
+  elseif( strcmp(arg_list{i},'-ov') )
+     ov = 1;
   elseif( strcmp(arg_list{i},'-opo') )
      opo = 1;
   elseif( strcmp(arg_list{i},'-ost') )
@@ -142,7 +146,7 @@ end
 
 
 
-if ( !opt && !onv && !opo )
+if ( !opt && !onv && !opo && !ov )
   onv = 1;
 end
 
@@ -313,6 +317,12 @@ end
 if ( onv )
    for ( i = 1:size(PNAMES,2) )
      printf('%s = %g\n',PNAMES{i}, P(i));
+   end
+end
+
+if ( ov )
+   for ( i = 1:size(PNAMES,2) )
+     printf('%g\n',P(i));
    end
 end
 
